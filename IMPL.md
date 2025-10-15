@@ -2,55 +2,90 @@
 
 This document outlines the implementation steps for WCE, organized into small batches with clear dependencies. Each phase builds on the previous one, ensuring the system can be developed incrementally and tested at each stage.
 
-## Phase 1: Foundation (Bootstrap)
+## Phase 1: Foundation (Bootstrap) ✅ COMPLETED
 
 **Goal**: Basic HTTP server that can route requests to different cenvs
 
-### 1.1 Project Initialization
-- [ ] Create `go.mod` with module name
-- [ ] Add dependencies: `mattn/go-sqlite3`, `github.com/google/starlark-go`
-- [ ] Create basic project structure:
+### 1.1 Project Initialization ✅
+- [x] Create `go.mod` with module name
+- [x] Add dependencies: `mattn/go-sqlite3` v1.14.32, `go.starlark.net`, `golang.org/x/crypto`
+- [x] Create basic project structure:
   ```
   /cmd/wce/main.go          - Entry point
   /internal/server/         - HTTP server
   /internal/cenv/           - Cenv management
-  /internal/db/             - Database operations
-  /internal/auth/           - Authentication
-  /internal/starlark/       - Starlark integration
-  /internal/template/       - Template engine
-  /web/                     - Static assets
+  /internal/db/             - Database operations (used in Phase 2+)
+  /internal/auth/           - Authentication (used in Phase 3+)
+  /internal/starlark/       - Starlark integration (used in Phase 6+)
+  /internal/template/       - Template engine (used in Phase 7+)
+  /web/                     - Static assets (used in Phase 8+)
   ```
 
-**Test**: `go build` succeeds
+**Test**: `go build` succeeds ✅
+**Note**: Starlark dependency is `go.starlark.net/starlark`, not `github.com/google/starlark-go`
 
-### 1.2 Basic HTTP Server
-- [ ] Implement HTTP server listening on port 5309
-- [ ] Graceful shutdown on SIGINT/SIGTERM
-- [ ] Basic logging (requests, errors)
-- [ ] Health check endpoint: `GET /health`
+### 1.2 Basic HTTP Server ✅
+- [x] Implement HTTP server listening on port 5309
+- [x] Graceful shutdown on SIGINT/SIGTERM (30s grace period)
+- [x] Logging middleware (method, path, status, duration)
+- [x] Health check endpoint: `GET /health`
+- [x] Proper timeouts: ReadTimeout=15s, WriteTimeout=15s, IdleTimeout=60s
 
-**Test**: Server starts, responds to `/health`
+**Test**: Server starts, responds to `/health` ✅
 
-### 1.3 Cenv Routing
-- [ ] Parse URL path to extract `{cenv-id}`
-- [ ] Validate cenv-id format (UUID)
-- [ ] Route requests: `/{cenv-id}/*` → cenv handler (namespace these with named accounts)
-- [ ] Route requests: `/new` → cenv creation handler
-- [ ] 404 for invalid paths
+**Implementation notes:**
+- Used custom `responseWriter` wrapper to capture status codes for logging
+- Logging happens via middleware for all requests
+- Server uses channels for coordinating graceful shutdown
 
-**Test**: Different cenv-ids route to correct handler
+### 1.3 Cenv Routing ✅
+- [x] Parse URL path to extract `{cenv-id}` using `r.PathValue()`
+- [x] Validate cenv-id format (UUID) with regex
+- [x] Route requests: `/{cenv-id}/{path...}` → cenv handler
+- [x] Route requests: `/new` → cenv creation handler
+- [x] Route requests: `GET /health` → health handler
+- [x] 404 for invalid paths and invalid UUIDs
 
-### 1.4 Database File Management
-- [ ] Configure cenv storage directory (e.g., `./cenvs/`)
-- [ ] Map cenv-id to file path: `./cenvs/{uuid}.db`
-- [ ] Check if database file exists
-- [ ] Create database file if needed
-- [ ] Set file permissions (600 - owner only)
+**Test**: Different cenv-ids route to correct handler ✅
 
-**Test**: Database files created with correct permissions
+**Implementation notes:**
+- **IMPORTANT**: Use Go 1.22+ `http.ServeMux` pattern matching, NOT manual path parsing
+- Pattern: `mux.HandleFunc("/{cenvID}/{path...}", handler)`
+- Extract values: `r.PathValue("cenvID")` and `r.PathValue("path")`
+- The `{path...}` wildcard captures remaining path segments
+- UUID validation happens in handler, not in routing
+- No need for manual `if r.URL.Path ==` checks - patterns handle it
+
+**Files created:**
+- `internal/cenv/cenv.go` - Manager, UUID validation, path parsing (mostly for testing)
+- `internal/server/server.go` - HTTP server with pattern-based routing
+
+### 1.4 Database File Management ✅
+- [x] Configure cenv storage directory: `./cenvs/` (configurable via `WCE_STORAGE_DIR`)
+- [x] Map cenv-id to file path: `./cenvs/{uuid}.db`
+- [x] Check if database file exists: `Manager.Exists(cenvID)`
+- [x] Create database file: `Manager.Create(cenvID)`
+- [x] Set file permissions (600 - owner only) via `os.Chmod()`
+- [x] Open database: `Manager.Open(cenvID)` with pragmas configured
+
+**Test**: Database files created with correct permissions ✅
+
+**Implementation notes:**
+- `Manager.Create()` creates empty SQLite database and sets permissions
+- `Manager.Open()` opens connection and sets pragmas:
+  - `PRAGMA foreign_keys = ON`
+  - `PRAGMA journal_mode = WAL`
+  - `PRAGMA synchronous = NORMAL`
+- Schema initialization deferred to Phase 2.2
+- Storage directory created with 0700 permissions in `main.go`
+
+**Files created:**
+- `internal/cenv/cenv.go` - Added `Exists()`, `Create()`, `Open()` methods
+- `internal/cenv/cenv_test.go` - Test suite (5 tests, all passing)
 
 **Dependencies**: None
-**Deliverable**: Server routes requests to cenv-specific handlers
+**Deliverable**: Server routes requests to cenv-specific handlers ✅
+**Binary size**: ~12MB (includes SQLite driver)
 
 ---
 
@@ -66,31 +101,53 @@ This document outlines the implementation steps for WCE, organized into small ba
   - `_wce_row_policies`
   - `_wce_config`
   - `_wce_audit_log`
-- [ ] Store schema in Go constant or embed from `.sql` file
+- [ ] Store schema as Go constant (use backtick strings for readability)
 - [ ] Schema includes indexes on foreign keys
+- [ ] Use proper SQLite data types (TEXT, INTEGER, BOOLEAN as INTEGER)
 
 **Test**: Schema SQL parses correctly
 
+**Implementation hints:**
+- Store schema in `internal/db/schema.go` as const
+- Split into logical sections with comments
+- Include the full schema from SECURITY.md as reference
+- Consider using `CREATE TABLE IF NOT EXISTS` for idempotency
+
 ### 2.2 Database Initialization
-- [ ] Connect to SQLite with appropriate pragmas:
-  - `PRAGMA foreign_keys = ON`
-  - `PRAGMA journal_mode = WAL`
-  - `PRAGMA synchronous = NORMAL`
+- [x] Connect to SQLite with appropriate pragmas (already done in Phase 1.4)
+  - `PRAGMA foreign_keys = ON` ✅
+  - `PRAGMA journal_mode = WAL` ✅
+  - `PRAGMA synchronous = NORMAL` ✅
+- [ ] Add `Manager.Initialize(cenvID)` method
 - [ ] Check if database is initialized (check for `_wce_users` table)
 - [ ] Execute schema creation if not initialized
-- [ ] Insert default config values
-- [ ] Close connection properly
+- [ ] Insert default config values into `_wce_config`
+- [ ] Return error if initialization fails
 
 **Test**: New cenv has all tables created
 
+**Implementation hints:**
+- Modify `Manager.Create()` to call `Initialize()` automatically
+- Use transaction for schema creation (all or nothing)
+- Query `sqlite_master` to check if `_wce_users` exists
+- Default config should include: `session_timeout_hours`, `allow_registration`, `max_users`
+
 ### 2.3 Connection Pooling
-- [ ] Create connection pool per cenv (max 5 connections)
-- [ ] Connection pool with idle timeout
-- [ ] Lazy loading: create pool on first access
-- [ ] Pool eviction after inactivity (e.g., 30 minutes)
-- [ ] Thread-safe pool management
+- [ ] Use `sql.DB` built-in connection pooling (no custom implementation needed)
+- [ ] Set `db.SetMaxOpenConns(5)` per cenv
+- [ ] Set `db.SetMaxIdleConns(2)`
+- [ ] Set `db.SetConnMaxLifetime(30 * time.Minute)`
+- [ ] Store `*sql.DB` in Manager's sync.Map for cenv -> connection mapping
+- [ ] Add `Manager.GetConnection(cenvID)` method with lazy loading
+- [ ] Add `Manager.CloseConnection(cenvID)` for cleanup
 
 **Test**: Multiple concurrent requests use pooled connections
+
+**Implementation hints:**
+- Go's `database/sql` package handles pooling automatically
+- Use `sync.Map` for thread-safe cenv -> *sql.DB mapping
+- Consider adding metrics to track pool usage (optional)
+- Connection eviction can be handled via `SetConnMaxIdleTime()`
 
 **Dependencies**: Phase 1
 **Deliverable**: New cenvs initialize with complete schema
@@ -102,63 +159,107 @@ This document outlines the implementation steps for WCE, organized into small ba
 **Goal**: User registration, login, and JWT token generation
 
 ### 3.1 User Registration (New Cenv Creation)
-- [ ] Endpoint: `POST /new` with username, password
-- [ ] Generate UUID for new cenv
-- [ ] Create database file
-- [ ] Initialize schema
+- [ ] Update `handleNewCenv` in `internal/server/server.go`
+- [ ] Parse JSON body: `{username, password}` from `POST /new`
+- [ ] Validate username (alphanumeric, 3-32 chars) and password (min 8 chars)
+- [ ] Generate UUID for new cenv using `github.com/google/uuid`
+- [ ] Call `Manager.Create(cenvID)` (already creates database)
+- [ ] Schema already initialized in Phase 2.2
 - [ ] Hash password with bcrypt (cost 12)
 - [ ] Generate UUID for user_id
-- [ ] Insert into `_wce_users` with role='owner'
+- [ ] Insert into `_wce_users` with role='owner', `enabled=1`
 - [ ] Return JSON: `{cenv_id, cenv_url}`
 
 **Test**: Creating cenv returns valid URL, database contains owner user
 
+**Implementation hints:**
+- Create `internal/auth/auth.go` for authentication logic
+- Consider adding `github.com/google/uuid` dependency for UUID generation
+- Or use `crypto/rand` and format as UUID manually
+- Set `created_at` to current Unix timestamp
+- Cenv URL format: `http://localhost:5309/{cenv_id}/`
+
 ### 3.2 Password Hashing
-- [ ] Use `golang.org/x/crypto/bcrypt`
-- [ ] Hash passwords with cost factor 12
-- [ ] Verify password against hash
-- [ ] Handle errors gracefully
+- [ ] Create `internal/auth/password.go`
+- [ ] Use `golang.org/x/crypto/bcrypt` (already in dependencies)
+- [ ] Function: `HashPassword(password string) (string, error)`
+- [ ] Function: `VerifyPassword(hash, password string) bool`
+- [ ] Hash passwords with cost factor 12: `bcrypt.GenerateFromPassword([]byte(password), 12)`
+- [ ] Handle errors gracefully (invalid cost, password too long)
 
 **Test**: Hashing and verification work correctly
 
+**Implementation hints:**
+- Bcrypt handles salt automatically
+- Max password length is 72 bytes (bcrypt limitation)
+- Consider enforcing max password length in validation
+
 ### 3.3 JWT Token Generation
-- [ ] Load JWT signing key from environment or config (32+ bytes)
+- [ ] Create `internal/auth/jwt.go`
+- [ ] Use standard library `crypto/hmac` and `encoding/base64` OR
+- [ ] Consider adding `github.com/golang-jwt/jwt/v5` (lighter than most JWT libs)
+- [ ] Load JWT signing key from environment variable `WCE_JWT_SECRET` (default: random at startup with warning)
 - [ ] Generate JWT with claims:
   - `cenv_id` (string)
   - `user_id` (string)
   - `username` (string)
   - `role` (string)
-  - `iat` (issued at)
-  - `exp` (expiration)
+  - `iat` (issued at) - Unix timestamp
+  - `exp` (expiration) - Unix timestamp
 - [ ] Sign with HS256 algorithm
 - [ ] Return token as string
 
 **Test**: Token generation and parsing work
 
+**Implementation hints:**
+- Default expiration: 24 hours (configurable per-cenv in future)
+- Store key in Server struct, generated at startup if not provided
+- Log warning if using randomly generated key (not persistent across restarts)
+
 ### 3.4 Login Endpoint
-- [ ] Endpoint: `POST /{cenv-id}/login` with username, password
-- [ ] Query `_wce_users` for username
-- [ ] Verify password hash
-- [ ] Check `enabled` flag
-- [ ] Update `last_login` timestamp
-- [ ] Generate JWT token
-- [ ] Insert session into `_wce_sessions`
-- [ ] Return token (JSON or Set-Cookie)
-- [ ] Log failed login attempts to `_wce_audit_log`
+- [ ] Add route: `mux.HandleFunc("POST /{cenvID}/login", s.handleLogin)`
+- [ ] Parse JSON body: `{username, password}`
+- [ ] Extract cenvID from path: `r.PathValue("cenvID")`
+- [ ] Validate UUID format
+- [ ] Get database connection: `Manager.GetConnection(cenvID)`
+- [ ] Query `_wce_users` for username (prepared statement)
+- [ ] Verify password hash with `bcrypt.CompareHashAndPassword()`
+- [ ] Check `enabled` flag (1 = enabled)
+- [ ] Update `last_login` timestamp (Unix timestamp)
+- [ ] Generate JWT token with 24h expiration
+- [ ] Insert session into `_wce_sessions` (session_id, user_id, token_hash, created_at, expires_at)
+- [ ] Return JSON: `{token, expires_at}` with 200 status
+- [ ] Log failed login attempts to `_wce_audit_log` (optional for MVP)
 
 **Test**: Valid credentials return token, invalid credentials return 401
 
+**Implementation hints:**
+- Hash token (SHA256) before storing in `_wce_sessions` for revocation
+- Session ID can be same as JWT `jti` claim or separate UUID
+- Return proper errors: 404 if cenv not found, 401 if auth fails
+- Don't leak information: same error for "user not found" vs "wrong password"
+
 ### 3.5 Token Validation Middleware
-- [ ] Extract token from Authorization header or cookie
+- [ ] Create `authMiddleware` in `internal/server/middleware.go`
+- [ ] Extract token from `Authorization: Bearer <token>` header
 - [ ] Parse and validate JWT signature
-- [ ] Verify `cenv_id` matches request path
-- [ ] Verify token not expired
-- [ ] Check session in `_wce_sessions` (not revoked)
-- [ ] Update `last_used` in sessions table
-- [ ] Inject user context into request
-- [ ] Return 401 if invalid
+- [ ] Verify `cenv_id` claim matches `r.PathValue("cenvID")`
+- [ ] Verify token not expired (check `exp` claim)
+- [ ] Get database connection for cenv
+- [ ] Query `_wce_sessions` with token hash (SHA256 of token)
+- [ ] Check session exists and not expired
+- [ ] Update `last_used` timestamp in `_wce_sessions`
+- [ ] Create context with user info: `context.WithValue(r.Context(), "user", userInfo)`
+- [ ] Call next handler with updated request
+- [ ] Return 401 if any validation fails
 
 **Test**: Authenticated requests pass, unauthenticated fail
+
+**Implementation hints:**
+- Apply middleware only to protected routes (not `/health`, `/new`, `/login`)
+- Use type assertion to extract user info from context
+- Consider creating `UserContext` struct: `{UserID, Username, Role, CenvID}`
+- Middleware can be selective: `authMiddleware(handler)` wraps specific handlers
 
 **Dependencies**: Phase 2
 **Deliverable**: Users can register, login, and authenticate
