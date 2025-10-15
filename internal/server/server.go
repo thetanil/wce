@@ -9,18 +9,22 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/thetanil/wce/internal/cenv"
 )
 
 // Server represents the WCE HTTP server
 type Server struct {
-	httpServer *http.Server
-	port       int
+	httpServer  *http.Server
+	port        int
+	cenvManager *cenv.Manager
 }
 
 // New creates a new Server instance
-func New(port int) *Server {
+func New(port int, cenvManager *cenv.Manager) *Server {
 	return &Server{
-		port: port,
+		port:        port,
+		cenvManager: cenvManager,
 	}
 }
 
@@ -29,8 +33,12 @@ func (s *Server) Start() error {
 	// Create router
 	mux := http.NewServeMux()
 
-	// Register routes
-	mux.HandleFunc("/health", s.handleHealth)
+	// Register routes with specific patterns
+	// Pattern matching priority: most specific to least specific
+	mux.HandleFunc("GET /health", s.handleHealth)
+	mux.HandleFunc("/new", s.handleNewCenv)
+	// Match both /{cenvID}/ and /{cenvID}/path/to/resource
+	mux.HandleFunc("/{cenvID}/{path...}", s.handleCenvRequest)
 
 	// Wrap with logging middleware
 	handler := loggingMiddleware(mux)
@@ -87,6 +95,43 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"ok","service":"wce"}`))
+}
+
+// handleNewCenv handles requests to create a new cenv
+func (s *Server) handleNewCenv(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"message":"New cenv creation - to be implemented in Phase 3"}`))
+}
+
+// handleCenvRequest handles all requests to cenv-specific endpoints
+func (s *Server) handleCenvRequest(w http.ResponseWriter, r *http.Request) {
+	// Extract cenv ID from path parameter
+	cenvID := r.PathValue("cenvID")
+
+	// Validate UUID format
+	if !cenv.IsValidUUID(cenvID) {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Get remaining path (if any)
+	remainingPath := r.PathValue("path")
+	if remainingPath == "" {
+		remainingPath = "/"
+	} else {
+		remainingPath = "/" + remainingPath
+	}
+
+	// For now, just return a placeholder response
+	// In future phases, this will:
+	// 1. Load the cenv database
+	// 2. Check authentication
+	// 3. Route to appropriate handler
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	response := fmt.Sprintf(`{"cenv_id":"%s","path":"%s","message":"Cenv handler - to be implemented"}`, cenvID, remainingPath)
+	w.Write([]byte(response))
 }
 
 // loggingMiddleware logs all HTTP requests
