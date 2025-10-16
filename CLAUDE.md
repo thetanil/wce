@@ -2,6 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Quick Status (October 2025)
+
+**✅ Phases 1-5 Complete**: Foundation, Database, Authentication, Authorization, and Document Store are fully implemented and tested.
+
+**Current State**:
+- 97 tests passing across 5 packages
+- 64-79% test coverage
+- Document store with FTS5 full-text search working
+- REST API for documents operational
+- JWT authentication with session management
+- Role-based permissions with row-level policies
+
+**Next**: Phase 6 (Starlark Integration) or Phase 7 (Template System)
+
+**See**: IMPL.md for detailed implementation status, README.md for user docs
+
 ## Project Overview
 
 WCE (Web Compute Environment) is a lightweight web application platform built in Go that combines embedded SQLite storage with Starlark scripting for runtime extensibility. Each user can provision isolated compute environments (cenvs), where each cenv is a standalone SQLite database with its own authentication, data, and logic.

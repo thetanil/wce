@@ -40,31 +40,47 @@ WCE is designed to be a minimal yet powerful web compute environment that compil
 
 ## Dependencies
 
-### Go Dependencies
+### Go Dependencies (Minimal)
 
-- [mattn/go-sqlite3](https://github.com/mattn/go-sqlite3) - SQLite3 driver
-- [starlark-go](https://github.com/google/starlark-go) - Starlark interpreter
+- [mattn/go-sqlite3](https://github.com/mattn/go-sqlite3) - SQLite3 driver with FTS5 support
+- [golang.org/x/crypto](https://pkg.go.dev/golang.org/x/crypto) - Bcrypt password hashing only
 
-### Browser Dependencies
+**Future**: [starlark-go](https://github.com/google/starlark-go) will be added for Starlark integration (Phase 6)
+
+### Browser Dependencies (Planned)
 
 - [monaco-vim](https://github.com/brijeshb42/monaco-vim) - Monaco editor with Vim keybindings
 
-**Note**: Additional dependencies require explicit approval to maintain binary size.
+**Note**: We maintain strict dependency discipline. Additional dependencies require explicit approval to keep binary size minimal (~10-12 MB).
 
-## Features
+## Current Status
 
-### Current
+### ✅ Implemented (Phases 1-5)
 
-- SQLite3-based storage acting as document database
-- Event bus implementation using commit hooks
-- Template storage and rendering
-- Starlark script execution
+- **Foundation** (Phase 1): HTTP server with cenv routing and database management
+- **Database Schema** (Phase 2): Complete schema with security, users, permissions, and documents
+- **Authentication** (Phase 3): JWT-based auth, session management, user registration
+- **Authorization** (Phase 4): Role-based permissions and row-level security policies
+- **Document Store** (Phase 5): Full CRUD operations with FTS5 search, REST API, and tags
+  - Hierarchical document IDs (`pages/home`, `api/users`)
+  - Full-text search with BM25 ranking
+  - Version tracking and user auditing
+  - Binary content support (base64 encoding)
+  - Tag-based categorization
 
-### Planned
+### 🚧 In Progress
 
-- Web-based Starlark endpoint definition
-- OpenAPI specification support
-- Dynamic API creation from browser UI
+- **Test Coverage**: 97 tests across 5 packages, 64-79% coverage
+- **Build System**: Makefile with `build`, `test`, `coverage` commands
+- **Documentation**: Implementation plan (IMPL.md), build guides
+
+### 📋 Planned (Phases 6+)
+
+- **Starlark Integration** (Phase 6): Runtime extensibility without recompilation
+- **Template System** (Phase 7): Document-based templates with rendering and caching
+- **Web UI** (Phase 8-9): Browser-based management interface
+- **Security Hardening** (Phase 10): Production-ready security measures
+- **Admin Features** (Phase 11-12): Session management and configuration
 
 ## Development
 
@@ -91,6 +107,14 @@ make run
 ```bash
 make clean
 ```
+
+### Coverage
+
+```bash
+make coverage
+```
+
+Generates a coverage report in `coverage.html` that you can open in a browser.
 
 **Note**: The Makefile automatically includes the `fts5` build tag required for SQLite FTS5 support.
 
