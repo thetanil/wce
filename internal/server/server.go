@@ -66,12 +66,14 @@ func (s *Server) Start() error {
 	mux.HandleFunc("POST /{cenvID}/admin/policies", s.handleCreatePolicy)
 
 	// Document API endpoints
-	mux.HandleFunc("POST /{cenvID}/documents", s.handleCreateDocument)
-	mux.HandleFunc("GET /{cenvID}/documents", s.handleListDocuments)
+	// Note: Order matters - more specific routes must come first
+	// The {docID...} pattern captures paths with slashes (e.g., "pages/home", "api/users/list")
 	mux.HandleFunc("GET /{cenvID}/documents/search", s.handleSearchDocuments)
-	mux.HandleFunc("GET /{cenvID}/documents/{docID}", s.handleGetDocument)
-	mux.HandleFunc("PUT /{cenvID}/documents/{docID}", s.handleUpdateDocument)
-	mux.HandleFunc("DELETE /{cenvID}/documents/{docID}", s.handleDeleteDocument)
+	mux.HandleFunc("POST /{cenvID}/documents", s.handleCreateDocument)
+	mux.HandleFunc("GET /{cenvID}/documents/{docID...}", s.handleGetDocument)
+	mux.HandleFunc("PUT /{cenvID}/documents/{docID...}", s.handleUpdateDocument)
+	mux.HandleFunc("DELETE /{cenvID}/documents/{docID...}", s.handleDeleteDocument)
+	mux.HandleFunc("GET /{cenvID}/documents", s.handleListDocuments)
 
 	// Match both /{cenvID}/ and /{cenvID}/path/to/resource
 	mux.HandleFunc("/{cenvID}/{path...}", s.handleCenvRequest)
