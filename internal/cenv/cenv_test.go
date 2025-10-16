@@ -2,6 +2,7 @@ package cenv
 
 import (
 	"os"
+	"sync"
 	"testing"
 )
 
@@ -37,6 +38,68 @@ func TestCreateDatabase(t *testing.T) {
 	// Test that creating again fails
 	if err := manager.Create(cenvID); err == nil {
 		t.Error("Creating duplicate database should fail")
+	}
+}
+
+func TestSchemaInitialization(t *testing.T) {
+	// Create temporary directory for test
+	tempDir := t.TempDir()
+
+	manager := NewManager(tempDir)
+	cenvID := "223e4567-e89b-12d3-a456-426614174000"
+
+	// Create database (should auto-initialize schema)
+	if err := manager.Create(cenvID); err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+
+	// Open connection to verify schema
+	db, err := manager.Open(cenvID)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	// Check all required tables exist
+	requiredTables := []string{
+		"_wce_users",
+		"_wce_sessions",
+		"_wce_table_permissions",
+		"_wce_row_policies",
+		"_wce_config",
+		"_wce_audit_log",
+	}
+
+	for _, tableName := range requiredTables {
+		var count int
+		query := "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?"
+		err := db.QueryRow(query, tableName).Scan(&count)
+		if err != nil {
+			t.Fatalf("Failed to query for table %s: %v", tableName, err)
+		}
+		if count != 1 {
+			t.Errorf("Table %s should exist, found %d", tableName, count)
+		}
+	}
+
+	// Verify default config values exist
+	var sessionTimeout string
+	err = db.QueryRow("SELECT value FROM _wce_config WHERE key='session_timeout_hours'").Scan(&sessionTimeout)
+	if err != nil {
+		t.Fatalf("Failed to query default config: %v", err)
+	}
+	if sessionTimeout != "24" {
+		t.Errorf("Expected session_timeout_hours=24, got %s", sessionTimeout)
+	}
+
+	// Verify indexes were created
+	var indexCount int
+	err = db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'").Scan(&indexCount)
+	if err != nil {
+		t.Fatalf("Failed to count indexes: %v", err)
+	}
+	if indexCount == 0 {
+		t.Error("Expected indexes to be created")
 	}
 }
 
@@ -156,5 +219,83 @@ func TestParsePath(t *testing.T) {
 			t.Errorf("ParsePath(%s) = (%s, %s), want (%s, %s)",
 				test.path, gotCenvID, gotRemaining, test.wantCenvID, test.wantRemaining)
 		}
+	}
+}
+
+func TestConnectionPooling(t *testing.T) {
+	// Create temporary directory for test
+	tempDir := t.TempDir()
+
+	manager := NewManager(tempDir)
+	cenvID := "323e4567-e89b-12d3-a456-426614174000"
+
+	// Create database
+	if err := manager.Create(cenvID); err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+
+	// Get connection - should be created
+	conn1, err := manager.GetConnection(cenvID)
+	if err != nil {
+		t.Fatalf("Failed to get connection: %v", err)
+	}
+
+	// Get connection again - should return same connection
+	conn2, err := manager.GetConnection(cenvID)
+	if err != nil {
+		t.Fatalf("Failed to get connection second time: %v", err)
+	}
+
+	if conn1 != conn2 {
+		t.Error("Expected same connection to be returned from pool")
+	}
+
+	// Test concurrent access
+	var wg sync.WaitGroup
+	errors := make(chan error, 10)
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			conn, err := manager.GetConnection(cenvID)
+			if err != nil {
+				errors <- err
+				return
+			}
+			// Try to query the database
+			var count int
+			err = conn.QueryRow("SELECT COUNT(*) FROM _wce_users").Scan(&count)
+			if err != nil {
+				errors <- err
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errors)
+
+	for err := range errors {
+		t.Errorf("Concurrent access error: %v", err)
+	}
+
+	// Test CloseConnection
+	if err := manager.CloseConnection(cenvID); err != nil {
+		t.Errorf("Failed to close connection: %v", err)
+	}
+
+	// After closing, should get new connection
+	conn3, err := manager.GetConnection(cenvID)
+	if err != nil {
+		t.Fatalf("Failed to get connection after close: %v", err)
+	}
+
+	if conn3 == conn1 {
+		t.Error("Expected new connection after closing")
+	}
+
+	// Test CloseAll
+	if err := manager.CloseAll(); err != nil {
+		t.Errorf("Failed to close all connections: %v", err)
 	}
 }

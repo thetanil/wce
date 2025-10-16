@@ -89,68 +89,89 @@ This document outlines the implementation steps for WCE, organized into small ba
 
 ---
 
-## Phase 2: Database Schema
+## Phase 2: Database Schema ✅ COMPLETED
 
 **Goal**: Initialize new cenvs with proper schema
 
-### 2.1 Schema Definition
-- [ ] Define SQL schema for all `_wce_*` tables:
-  - `_wce_users`
-  - `_wce_sessions`
-  - `_wce_table_permissions`
-  - `_wce_row_policies`
-  - `_wce_config`
-  - `_wce_audit_log`
-- [ ] Store schema as Go constant (use backtick strings for readability)
-- [ ] Schema includes indexes on foreign keys
-- [ ] Use proper SQLite data types (TEXT, INTEGER, BOOLEAN as INTEGER)
+### 2.1 Schema Definition ✅
+- [x] Define SQL schema for all `_wce_*` tables:
+  - `_wce_users` ✅
+  - `_wce_sessions` ✅
+  - `_wce_table_permissions` ✅
+  - `_wce_row_policies` ✅
+  - `_wce_config` ✅
+  - `_wce_audit_log` ✅
+- [x] Store schema as Go constant (use backtick strings for readability)
+- [x] Schema includes indexes on foreign keys
+- [x] Use proper SQLite data types (TEXT, INTEGER, BOOLEAN as INTEGER)
 
-**Test**: Schema SQL parses correctly
+**Test**: Schema SQL parses correctly ✅
 
-**Implementation hints:**
-- Store schema in `internal/db/schema.go` as const
+**Implementation:**
+- Created `internal/db/schema.go` with complete schema as const
 - Split into logical sections with comments
-- Include the full schema from SECURITY.md as reference
-- Consider using `CREATE TABLE IF NOT EXISTS` for idempotency
+- 13 indexes created on foreign keys and common query fields
+- Used `CREATE TABLE IF NOT EXISTS` for idempotency
+- Includes default INSERT for `_wce_config` values
 
-### 2.2 Database Initialization
+### 2.2 Database Initialization ✅
 - [x] Connect to SQLite with appropriate pragmas (already done in Phase 1.4)
   - `PRAGMA foreign_keys = ON` ✅
   - `PRAGMA journal_mode = WAL` ✅
   - `PRAGMA synchronous = NORMAL` ✅
-- [ ] Add `Manager.Initialize(cenvID)` method
-- [ ] Check if database is initialized (check for `_wce_users` table)
-- [ ] Execute schema creation if not initialized
-- [ ] Insert default config values into `_wce_config`
-- [ ] Return error if initialization fails
+- [x] Add `Manager.Initialize(cenvID)` method
+- [x] Check if database is initialized (check for `_wce_users` table)
+- [x] Execute schema creation if not initialized
+- [x] Insert default config values into `_wce_config`
+- [x] Return error if initialization fails
 
-**Test**: New cenv has all tables created
+**Test**: New cenv has all tables created ✅
 
-**Implementation hints:**
-- Modify `Manager.Create()` to call `Initialize()` automatically
-- Use transaction for schema creation (all or nothing)
-- Query `sqlite_master` to check if `_wce_users` exists
-- Default config should include: `session_timeout_hours`, `allow_registration`, `max_users`
+**Implementation:**
+- Modified `Manager.Create()` to call `Initialize()` automatically
+- Uses transaction for schema creation (all or nothing)
+- Queries `sqlite_master` to check if `_wce_users` exists
+- Default config: `session_timeout_hours=24`, `allow_registration=false`, `max_users=10`
+- Cleanup on failure: removes database file if initialization fails
 
-### 2.3 Connection Pooling
-- [ ] Use `sql.DB` built-in connection pooling (no custom implementation needed)
-- [ ] Set `db.SetMaxOpenConns(5)` per cenv
-- [ ] Set `db.SetMaxIdleConns(2)`
-- [ ] Set `db.SetConnMaxLifetime(30 * time.Minute)`
-- [ ] Store `*sql.DB` in Manager's sync.Map for cenv -> connection mapping
-- [ ] Add `Manager.GetConnection(cenvID)` method with lazy loading
-- [ ] Add `Manager.CloseConnection(cenvID)` for cleanup
+### 2.3 Connection Pooling ✅
+- [x] Use `sql.DB` built-in connection pooling (no custom implementation needed)
+- [x] Set `db.SetMaxOpenConns(5)` per cenv
+- [x] Set `db.SetMaxIdleConns(2)`
+- [x] Set `db.SetConnMaxLifetime(30 * time.Minute)`
+- [x] Set `db.SetConnMaxIdleTime(10 * time.Minute)` for idle connection cleanup
+- [x] Store `*sql.DB` in Manager's sync.Map for cenv -> connection mapping
+- [x] Add `Manager.GetConnection(cenvID)` method with lazy loading
+- [x] Add `Manager.CloseConnection(cenvID)` for cleanup
+- [x] Add `Manager.CloseAll()` for shutting down all connections
 
-**Test**: Multiple concurrent requests use pooled connections
+**Test**: Multiple concurrent requests use pooled connections ✅
 
-**Implementation hints:**
+**Implementation:**
 - Go's `database/sql` package handles pooling automatically
-- Use `sync.Map` for thread-safe cenv -> *sql.DB mapping
-- Consider adding metrics to track pool usage (optional)
-- Connection eviction can be handled via `SetConnMaxIdleTime()`
+- Used `sync.Map` for thread-safe cenv -> *sql.DB mapping
+- `GetConnection()` lazy-loads connections on first access
+- Connection reused from pool on subsequent calls
+- `Open()` method still available for non-pooled connections (used internally)
+- Tested with 10 concurrent goroutines successfully
 
-**Dependencies**: Phase 1
-**Deliverable**: New cenvs initialize with complete schema
+**Files created:**
+- `internal/db/schema.go` - Complete WCE schema definition
+- Updated `internal/cenv/cenv.go` - Added Initialize(), GetConnection(), connection pooling
+- Updated `internal/cenv/cenv_test.go` - Added TestSchemaInitialization, TestConnectionPooling
+
+**Test results:**
+- 7/7 tests passing
+- All 6 system tables created
+- 13 indexes created
+- Default config values inserted
+- Connection pooling working
+- Concurrent access working
+
+**Dependencies**: Phase 1 ✅
+**Deliverable**: New cenvs initialize with complete schema ✅
+
+**Database size**: ~115KB per empty cenv (includes schema + indexes + config)
 
 ---
 
