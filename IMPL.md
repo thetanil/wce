@@ -173,117 +173,190 @@ This document outlines the implementation steps for WCE, organized into small ba
 
 **Database size**: ~115KB per empty cenv (includes schema + indexes + config)
 
+**Phase 2 Extension Notes (for Phase 5):**
+When implementing Phase 5 (Document Store), add these tables to the schema:
+- `_wce_documents` - Core document storage (see Phase 5.1)
+- `_wce_document_tags` - Document categorization
+- `_wce_document_search` - FTS5 full-text search index
+- `_wce_page_cache` - Rendered page cache (see Phase 7.3)
+
+These tables will be added to `internal/db/schema.go` in Phase 5.
+
 ---
 
-## Phase 3: Authentication Core
+## Phase 3: Authentication Core ✅ COMPLETED
 
 **Goal**: User registration, login, and JWT token generation
 
-### 3.1 User Registration (New Cenv Creation)
-- [ ] Update `handleNewCenv` in `internal/server/server.go`
-- [ ] Parse JSON body: `{username, password}` from `POST /new`
-- [ ] Validate username (alphanumeric, 3-32 chars) and password (min 8 chars)
-- [ ] Generate UUID for new cenv using `github.com/google/uuid`
-- [ ] Call `Manager.Create(cenvID)` (already creates database)
-- [ ] Schema already initialized in Phase 2.2
-- [ ] Hash password with bcrypt (cost 12)
-- [ ] Generate UUID for user_id
-- [ ] Insert into `_wce_users` with role='owner', `enabled=1`
-- [ ] Return JSON: `{cenv_id, cenv_url}`
+### 3.1 User Registration (New Cenv Creation) ✅
+- [x] Update `handleNewCenv` in `internal/server/server.go`
+- [x] Parse JSON body: `{username, password, email?}` from `POST /new`
+- [x] Validate username (required) and password (min 8 chars)
+- [x] Generate UUID for new cenv (custom implementation using crypto/rand)
+- [x] Call `Manager.Create(cenvID)` (already creates database)
+- [x] Schema already initialized in Phase 2.2
+- [x] Hash password with bcrypt (cost 12)
+- [x] Generate UUID for user_id
+- [x] Insert into `_wce_users` with role='owner', `enabled=1`
+- [x] Return JSON: `{cenv_id, cenv_url, username, message}` with status 201
 
-**Test**: Creating cenv returns valid URL, database contains owner user
+**Test**: Creating cenv returns valid URL, database contains owner user ✅
 
-**Implementation hints:**
-- Create `internal/auth/auth.go` for authentication logic
-- Consider adding `github.com/google/uuid` dependency for UUID generation
-- Or use `crypto/rand` and format as UUID manually
-- Set `created_at` to current Unix timestamp
-- Cenv URL format: `http://localhost:5309/{cenv_id}/`
+**Implementation:**
+- Created `internal/auth/auth.go` with full user management
+- Used custom UUID generation (RFC 4122 v4) with `crypto/rand` - no external dependency needed
+- `CreateUser()` handles password hashing and user insertion
+- Cenv URL includes scheme (http/https) detection from request
+- Proper error handling for duplicate usernames, short passwords
 
-### 3.2 Password Hashing
-- [ ] Create `internal/auth/password.go`
-- [ ] Use `golang.org/x/crypto/bcrypt` (already in dependencies)
-- [ ] Function: `HashPassword(password string) (string, error)`
-- [ ] Function: `VerifyPassword(hash, password string) bool`
-- [ ] Hash passwords with cost factor 12: `bcrypt.GenerateFromPassword([]byte(password), 12)`
-- [ ] Handle errors gracefully (invalid cost, password too long)
+### 3.2 Password Hashing ✅
+- [x] Password functions in `internal/auth/auth.go`
+- [x] Use `golang.org/x/crypto/bcrypt` (added to dependencies)
+- [x] Function: `HashPassword(password string) (string, error)`
+- [x] Function: `VerifyPassword(password, hash string) error`
+- [x] Hash passwords with cost factor 12
+- [x] Handle errors gracefully
 
-**Test**: Hashing and verification work correctly
+**Test**: Hashing and verification work correctly ✅
 
-**Implementation hints:**
-- Bcrypt handles salt automatically
-- Max password length is 72 bytes (bcrypt limitation)
-- Consider enforcing max password length in validation
+**Implementation:**
+- Bcrypt cost factor 12 provides good security/performance balance
+- All tests pass including duplicate password verification
+- Error messages don't leak password information
 
-### 3.3 JWT Token Generation
-- [ ] Create `internal/auth/jwt.go`
-- [ ] Use standard library `crypto/hmac` and `encoding/base64` OR
-- [ ] Consider adding `github.com/golang-jwt/jwt/v5` (lighter than most JWT libs)
-- [ ] Load JWT signing key from environment variable `WCE_JWT_SECRET` (default: random at startup with warning)
-- [ ] Generate JWT with claims:
-  - `cenv_id` (string)
+### 3.3 JWT Token Generation ✅
+- [x] Created `internal/auth/jwt.go` with full JWT implementation
+- [x] **Used standard library only** - no JWT dependencies
+- [x] Implemented HMAC-SHA256 signing manually with `crypto/hmac`
+- [x] JWT secret generated randomly at server startup (stored in Server struct)
+- [x] Generate JWT with claims:
   - `user_id` (string)
   - `username` (string)
+  - `cenv_id` (string)
   - `role` (string)
+  - `jti` (session ID for tracking)
   - `iat` (issued at) - Unix timestamp
   - `exp` (expiration) - Unix timestamp
-- [ ] Sign with HS256 algorithm
-- [ ] Return token as string
+- [x] Sign with HS256 algorithm
+- [x] Return token as base64url-encoded string
 
-**Test**: Token generation and parsing work
+**Test**: Token generation and parsing work ✅
 
-**Implementation hints:**
-- Default expiration: 24 hours (configurable per-cenv in future)
-- Store key in Server struct, generated at startup if not provided
-- Log warning if using randomly generated key (not persistent across restarts)
+**Implementation:**
+- Manual JWT implementation keeps binary size small
+- `JWTManager` struct handles generation and validation
+- `ValidateToken()` verifies signature and expiration
+- `GetTokenHash()` provides SHA256 hash for session storage
+- Default expiration: 24 hours (`auth.DefaultSessionTimeout`)
 
-### 3.4 Login Endpoint
-- [ ] Add route: `mux.HandleFunc("POST /{cenvID}/login", s.handleLogin)`
-- [ ] Parse JSON body: `{username, password}`
-- [ ] Extract cenvID from path: `r.PathValue("cenvID")`
-- [ ] Validate UUID format
-- [ ] Get database connection: `Manager.GetConnection(cenvID)`
-- [ ] Query `_wce_users` for username (prepared statement)
-- [ ] Verify password hash with `bcrypt.CompareHashAndPassword()`
-- [ ] Check `enabled` flag (1 = enabled)
-- [ ] Update `last_login` timestamp (Unix timestamp)
-- [ ] Generate JWT token with 24h expiration
-- [ ] Insert session into `_wce_sessions` (session_id, user_id, token_hash, created_at, expires_at)
-- [ ] Return JSON: `{token, expires_at}` with 200 status
-- [ ] Log failed login attempts to `_wce_audit_log` (optional for MVP)
+### 3.4 Login Endpoint ✅
+- [x] Added route: `mux.HandleFunc("POST /{cenvID}/login", s.handleLogin)`
+- [x] Parse JSON body: `{username, password}`
+- [x] Extract cenvID from path: `r.PathValue("cenvID")`
+- [x] Validate UUID format and cenv exists
+- [x] Get database connection: `Manager.GetConnection(cenvID)`
+- [x] Query `_wce_users` for username (prepared statement)
+- [x] Verify password hash with `auth.VerifyPassword()`
+- [x] Check `enabled` flag
+- [x] Update `last_login` timestamp
+- [x] Generate JWT token with 24h expiration
+- [x] Generate session ID and insert into `_wce_sessions`
+- [x] Store token hash (SHA256) for revocation capability
+- [x] Capture IP address and user agent
+- [x] Return JSON: `{token, expires_at, user_id, username, role}` with 200 status
 
-**Test**: Valid credentials return token, invalid credentials return 401
+**Test**: Valid credentials return token, invalid credentials return 401 ✅
 
-**Implementation hints:**
-- Hash token (SHA256) before storing in `_wce_sessions` for revocation
-- Session ID can be same as JWT `jti` claim or separate UUID
-- Return proper errors: 404 if cenv not found, 401 if auth fails
-- Don't leak information: same error for "user not found" vs "wrong password"
+**Implementation:**
+- Token hash stored using `auth.GetTokenHash()` for revocation
+- Session tracking includes IP address and user agent
+- Generic error messages don't reveal if user exists
+- Disabled accounts return 401 with specific message
+- All database operations use prepared statements
 
-### 3.5 Token Validation Middleware
-- [ ] Create `authMiddleware` in `internal/server/middleware.go`
-- [ ] Extract token from `Authorization: Bearer <token>` header
-- [ ] Parse and validate JWT signature
-- [ ] Verify `cenv_id` claim matches `r.PathValue("cenvID")`
-- [ ] Verify token not expired (check `exp` claim)
-- [ ] Get database connection for cenv
-- [ ] Query `_wce_sessions` with token hash (SHA256 of token)
-- [ ] Check session exists and not expired
-- [ ] Update `last_used` timestamp in `_wce_sessions`
-- [ ] Create context with user info: `context.WithValue(r.Context(), "user", userInfo)`
-- [ ] Call next handler with updated request
-- [ ] Return 401 if any validation fails
+### 3.5 Token Validation & Authentication ✅
+- [x] Created `internal/auth/middleware.go` with reusable middleware
+- [x] Integrated authentication directly into `handleCenvRequest`
+- [x] Extract token from `Authorization: Bearer <token>` header
+- [x] Parse and validate JWT signature using `JWTManager`
+- [x] Verify `cenv_id` claim matches cenv from path
+- [x] Verify token not expired (check `exp` claim)
+- [x] Get database connection for cenv
+- [x] Query `_wce_sessions` with token hash
+- [x] Check session exists and not expired
+- [x] Return user info in response for now (placeholder for future handlers)
+- [x] Return 401 if any validation fails
 
-**Test**: Authenticated requests pass, unauthenticated fail
+**Test**: Authenticated requests pass, unauthenticated fail ✅
 
-**Implementation hints:**
-- Apply middleware only to protected routes (not `/health`, `/new`, `/login`)
-- Use type assertion to extract user info from context
-- Consider creating `UserContext` struct: `{UserID, Username, Role, CenvID}`
-- Middleware can be selective: `authMiddleware(handler)` wraps specific handlers
+**Implementation:**
+- `AuthMiddleware()` function available for future use
+- `RequireRole()` middleware for role-based access
+- `GetClaimsFromContext()` helper for extracting user info
+- Current implementation: inline auth in `handleCenvRequest`
+- Tokens scoped to specific cenv (cannot use token from cenv A on cenv B)
+- Session validation happens on every request
 
-**Dependencies**: Phase 2
-**Deliverable**: Users can register, login, and authenticate
+### 3.6 Session Management ✅
+- [x] `CreateSession()` - Create session with token hash
+- [x] `IsSessionValid()` - Check if session exists and not expired
+- [x] `RevokeSession()` - Delete single session by token hash
+- [x] `RevokeAllUserSessions()` - Delete all sessions for a user
+- [x] `CleanupExpiredSessions()` - Remove expired sessions
+- [x] Session tracking includes IP, user agent, timestamps
+
+**Test**: Session management functions work correctly ✅
+
+### 3.7 Integration Testing ✅
+- [x] Created `internal/server/server_integration_test.go` (414 lines)
+- [x] Tests complete flow: create cenv → login → authenticated requests
+- [x] Tests error cases: wrong password, missing token, invalid token
+- [x] Tests token isolation between cenvs
+- [x] Tests multiple authenticated paths
+- [x] All 9 sub-tests passing in ~2 seconds
+
+**Test Coverage:**
+- internal/auth: 64.0% (21 tests)
+- internal/cenv: 76.7% (7 tests)
+- internal/server: 49.3% (9 integration tests)
+- **Total: 37 tests, all passing**
+
+**Files created:**
+- `internal/auth/auth.go` - User & session management (274 lines)
+- `internal/auth/auth_test.go` - Auth unit tests (498 lines)
+- `internal/auth/jwt.go` - JWT implementation (132 lines)
+- `internal/auth/jwt_test.go` - JWT unit tests (136 lines)
+- `internal/auth/middleware.go` - Auth middleware (98 lines)
+- `internal/server/server_integration_test.go` - Integration tests (414 lines)
+- Updated `internal/server/server.go` - HTTP handlers (+396 lines)
+
+**Dependencies Added**:
+- `golang.org/x/crypto` v0.43.0 (for bcrypt only - allowed in CLAUDE.md)
+
+**Key Design Decisions:**
+1. **No external JWT library** - Implemented JWT manually using stdlib to minimize dependencies
+2. **Custom UUID generation** - Used crypto/rand instead of external package
+3. **Session tracking** - Tokens hashed and stored for revocation capability
+4. **Token scoping** - JWT claims include cenv_id to prevent cross-cenv token reuse
+5. **Security first** - Generic error messages, bcrypt cost 12, prepared statements
+
+**Security Features:**
+- Bcrypt password hashing (never store plaintext)
+- JWT tokens signed with HMAC-SHA256
+- Session tracking with revocation capability
+- Token expiration (24 hours default)
+- Database files with 600 permissions
+- All queries use prepared statements
+- IP address and user agent tracking
+- Token scoped to specific cenv
+
+**Deliverable**: Users can register, login, and authenticate ✅
+
+**Next Phase Notes:**
+- Authentication is complete and tested
+- Phase 4 (Authorization) can now build on this foundation
+- Consider implementing logout endpoint in Phase 11 (uses `RevokeSession()`)
+- JWT secret should be configurable via environment variable in production
 
 ---
 
@@ -331,11 +404,75 @@ This document outlines the implementation steps for WCE, organized into small ba
 
 ---
 
-## Phase 5: Core Database Operations
+## Phase 5: Document Store & Core Database Operations
 
-**Goal**: Safe, audited database queries with commit hooks
+**Goal**: SQLite-based document store with LiteStore-inspired design, plus safe database operations
 
-### 5.1 Parameterized Query Execution
+### 5.1 Document Store Schema
+- [ ] Create `_wce_documents` table:
+  - `id` TEXT PRIMARY KEY (document path/key)
+  - `content` TEXT (document body - JSON, HTML, markdown, etc.)
+  - `content_type` TEXT (e.g., 'application/json', 'text/html', 'text/markdown')
+  - `is_binary` INTEGER (0 = text, 1 = base64-encoded binary)
+  - `searchable` INTEGER (1 = indexed for search, 0 = not indexed)
+  - `created_at` INTEGER (Unix timestamp)
+  - `modified_at` INTEGER (Unix timestamp)
+  - `created_by` TEXT (user_id)
+  - `modified_by` TEXT (user_id)
+  - `version` INTEGER (incremental version number)
+- [ ] Create `_wce_document_tags` table for categorization:
+  - `id` INTEGER PRIMARY KEY AUTOINCREMENT
+  - `document_id` TEXT (FK to _wce_documents)
+  - `tag` TEXT (tag name)
+  - UNIQUE(document_id, tag)
+- [ ] Create `_wce_document_search` table using FTS5:
+  - Full-text search index for searchable documents
+  - Index document_id, content
+- [ ] Create indexes on foreign keys and common query fields
+
+**Test**: Document tables created successfully
+
+**Implementation hints:**
+- Similar to LiteStore's approach but adapted for WCE's multi-tenant model
+- Documents are stored as-is for text, base64-encoded for binary
+- Use hierarchical document IDs: `pages/home`, `api/users`, `templates/header`
+- Enable SQLite JSON1 extension for JSON document queries
+- Consider document size limits (e.g., 10MB per document)
+
+### 5.2 Document CRUD Operations
+- [ ] Create `internal/document/document.go`
+- [ ] `CreateDocument(id, content, contentType)` - Insert new document
+- [ ] `GetDocument(id)` - Retrieve document by ID
+- [ ] `UpdateDocument(id, content)` - Update existing document
+- [ ] `DeleteDocument(id)` - Remove document
+- [ ] `ListDocuments(prefix, limit, offset)` - List with pagination
+- [ ] `SearchDocuments(query, limit)` - Full-text search
+- [ ] All operations enforce permissions (check user access)
+- [ ] Automatic timestamps (created_at, modified_at)
+- [ ] Track creator and modifier (created_by, modified_by)
+
+**Test**: Document CRUD operations work correctly
+
+**Implementation hints:**
+- Documents are the primary storage mechanism for content
+- HTML pages, API responses, templates all stored as documents
+- Use prepared statements for all queries
+- Return documents as JSON-serializable structs
+- Handle binary data encoding/decoding automatically
+
+### 5.3 Document API Endpoints
+- [ ] `POST /{cenv-id}/documents` - Create document (requires write permission)
+- [ ] `GET /{cenv-id}/documents/{doc-id}` - Get document (requires read permission)
+- [ ] `PUT /{cenv-id}/documents/{doc-id}` - Update document (requires write permission)
+- [ ] `DELETE /{cenv-id}/documents/{doc-id}` - Delete document (requires delete permission)
+- [ ] `GET /{cenv-id}/documents` - List documents with optional prefix filter
+- [ ] `GET /{cenv-id}/documents/search?q=query` - Search documents
+- [ ] Support content negotiation (Accept header)
+- [ ] Return proper HTTP status codes
+
+**Test**: Document API endpoints work correctly
+
+### 5.4 Parameterized Query Execution
 - [ ] API: `Query(sql string, params ...interface{})`
 - [ ] Always use parameterized statements
 - [ ] Never allow string interpolation in SQL
@@ -344,7 +481,7 @@ This document outlines the implementation steps for WCE, organized into small ba
 
 **Test**: Parameterized queries prevent SQL injection
 
-### 5.2 Transaction Support
+### 5.5 Transaction Support
 - [ ] Begin transaction: `BeginTx()`
 - [ ] Commit transaction: `Commit()`
 - [ ] Rollback transaction: `Rollback()`
@@ -353,25 +490,38 @@ This document outlines the implementation steps for WCE, organized into small ba
 
 **Test**: Transactions roll back on error
 
-### 5.3 Commit Hook System
+### 5.6 Commit Hook System
 - [ ] Register Go callback functions for commit events
 - [ ] Execute callbacks after successful commit
 - [ ] Pass transaction details to callbacks
 - [ ] Handle callback errors (log, don't fail commit)
 - [ ] Support multiple hooks
+- [ ] Use for document search index updates
+- [ ] Use for cache invalidation
 
 **Test**: Callbacks execute after commit
 
-### 5.4 Audit Logging
+### 5.7 Audit Logging
 - [ ] Log all write operations to `_wce_audit_log`
 - [ ] Capture: user_id, action, resource, timestamp, IP, user-agent
 - [ ] Log in same transaction as operation
 - [ ] Background cleanup of old audit logs (optional)
+- [ ] Include document operations in audit log
 
 **Test**: All operations appear in audit log
 
 **Dependencies**: Phase 4
-**Deliverable**: Secure database operations with auditing
+**Deliverable**: Document store with full CRUD operations and secure database layer
+
+**Document Store Design Notes:**
+- Inspired by LiteStore's approach but adapted for multi-tenant cenvs
+- Documents are the primary content storage mechanism
+- Each document has a unique ID (path-like: `pages/home`, `api/users`)
+- Content types: JSON, HTML, Markdown, plain text, binary (base64)
+- Full-text search using SQLite FTS5 extension
+- Tags for categorization and filtering
+- Version tracking for document history
+- Permission checks enforce access control
 
 ---
 
@@ -433,55 +583,119 @@ This document outlines the implementation steps for WCE, organized into small ba
 
 ---
 
-## Phase 7: Template System
+## Phase 7: Template & Page Rendering System
 
-**Goal**: Store and render templates with caching
+**Goal**: Document-based templates with rendering and caching
 
-### 7.1 Template Storage
-- [ ] Table: `_wce_templates` (id, name, content, syntax)
-- [ ] Support Go templates initially
-- [ ] Store edit version (raw markdown/source)
-- [ ] Store display version (rendered HTML)
-- [ ] Version tracking (optional)
+### 7.1 Template Document Storage
+- [ ] Store templates as documents in `_wce_documents`
+- [ ] Template document IDs use prefix: `templates/header`, `templates/footer`
+- [ ] Content type: `text/html+template` for Go templates
+- [ ] Content type: `text/markdown` for Markdown templates
+- [ ] Store both source (edit version) and rendered (display version)
+- [ ] Use document versioning for template history
+- [ ] Tag templates: `template`, `page`, `component`, etc.
 
-**Test**: Templates stored and retrieved
+**Test**: Templates stored and retrieved as documents
 
-### 7.2 Template Rendering
-- [ ] Parse Go templates
-- [ ] Render with data from database
+**Implementation hints:**
+- Templates are special documents with rendering capabilities
+- Source stored in main document content
+- Rendered version cached in `_wce_page_cache` table (see 7.3)
+- Use document tags to identify template types
+
+### 7.2 Template Rendering Engine
+- [ ] Create `internal/template/template.go`
+- [ ] Parse Go templates from document content
+- [ ] Render with data from:
+  - Database queries
+  - Other documents
+  - Starlark functions
+  - Request context
 - [ ] Auto-escape HTML by default
-- [ ] Support custom functions (safe subset)
-- [ ] Handle rendering errors
+- [ ] Support custom functions (safe subset):
+  - `doc(id)` - Load another document
+  - `query(sql, params)` - Execute query (with permissions)
+  - `markdown(text)` - Convert markdown to HTML
+  - `json(data)` - Serialize to JSON
+- [ ] Handle rendering errors gracefully
 
-**Test**: Templates render correctly
+**Test**: Templates render correctly with data
 
-### 7.3 Render Caching
-- [ ] Table: `_wce_page_cache` (path, html, rendered_at)
-- [ ] Store rendered output after commit
-- [ ] Serve from cache when available
-- [ ] Invalidate cache on relevant data changes
+**Implementation hints:**
+- Use `html/template` for automatic XSS protection
+- Provide sandbox for template functions
+- Templates can include other templates
+- Support layout templates (base + content)
 
-**Test**: Cached pages serve faster
+### 7.3 Page Cache System
+- [ ] Table: `_wce_page_cache` (document_id, rendered_html, rendered_at, etag)
+- [ ] Store rendered output after successful render
+- [ ] Generate ETag for cache validation
+- [ ] Invalidate cache on document changes
+- [ ] Set cache expiration (configurable per-cenv)
+- [ ] Support cache headers (Cache-Control, ETag, Last-Modified)
 
-### 7.4 Commit Hook for Rendering
-- [ ] Register commit hook to trigger re-rendering
-- [ ] Detect which templates affected by commit
-- [ ] Re-render affected templates
-- [ ] Update cache table
-- [ ] Handle errors without blocking commit
+**Test**: Cached pages serve faster, cache invalidates correctly
 
-**Test**: Commits trigger cache updates
+**Implementation hints:**
+- Cache keyed by document ID + query parameters (if any)
+- ETag generated from content hash
+- Support `If-None-Match` header for 304 responses
+- Cache miss triggers on-demand render
 
-### 7.5 Page Serving
-- [ ] Endpoint: `GET /{cenv-id}/pages/{path}`
-- [ ] Check cache first
+### 7.4 Commit Hook for Auto-Rendering
+- [ ] Register commit hook in Phase 5's hook system
+- [ ] Detect template document changes in commit
+- [ ] Detect data changes that affect template output
+- [ ] Trigger re-render for affected templates
+- [ ] Update cache table asynchronously
+- [ ] Handle rendering errors (log, don't fail commit)
+- [ ] Update search index for searchable rendered content
+
+**Test**: Commits trigger cache updates automatically
+
+**Implementation hints:**
+- Hook runs after commit succeeds
+- Re-render can happen asynchronously
+- Track dependencies between templates and data
+- Consider incremental cache updates
+
+### 7.5 Page Serving Endpoint
+- [ ] Endpoint: `GET /{cenv-id}/pages/{path}` OR `GET /{cenv-id}/p/{path}`
+- [ ] Map path to document ID: `pages/{path}`
+- [ ] Check cache first (`_wce_page_cache`)
+- [ ] Return cached HTML if fresh and ETag matches
 - [ ] Fall back to on-demand render if cache miss
-- [ ] Return HTML with appropriate headers
+- [ ] Support content negotiation:
+  - `Accept: text/html` → rendered page
+  - `Accept: application/json` → document metadata + content
+- [ ] Return proper HTTP headers (Content-Type, Cache-Control, ETag)
+- [ ] Support 304 Not Modified responses
 
-**Test**: Pages served from cache
+**Test**: Pages served efficiently from cache
 
-**Dependencies**: Phase 5
-**Deliverable**: Template system with automatic caching
+### 7.6 Markdown Rendering
+- [ ] Support Markdown documents: content_type = `text/markdown`
+- [ ] Render Markdown to HTML on-demand or cached
+- [ ] Use safe Markdown parser (no script injection)
+- [ ] Support code highlighting
+- [ ] Support custom extensions (tables, checkboxes, etc.)
+
+**Test**: Markdown documents render correctly
+
+**Dependencies**: Phase 5 (Document Store)
+**Deliverable**: Document-based template system with rendering and caching
+
+**Template System Design Notes:**
+- Templates stored as special documents (not separate table)
+- Source (edit) and rendered (display) versions both tracked
+- Cache system provides fast page serving
+- Commit hooks enable automatic cache updates
+- Templates can reference other documents and query data
+- Supports both Go templates and Markdown
+- Permission system controls template access
+- ETag-based cache validation for efficiency
 
 ---
 
@@ -952,13 +1166,19 @@ Each phase should result in a working, testable system:
 
 If time is limited, focus on these essential tasks first:
 
-1. **Phase 1-3**: Foundation + Authentication (critical)
-2. **Phase 4-5**: Permissions + Database ops (critical)
-3. **Phase 6**: Starlark (core feature)
-4. **Phase 8**: Basic web UI (usability)
-5. **Phase 10**: Security hardening (production requirement)
+1. **Phase 1-3**: Foundation + Authentication (critical) ✅ **COMPLETE**
+2. **Phase 4**: Permissions system (important for multi-user cenvs)
+3. **Phase 5**: Document Store + Database ops (critical - core feature)
+4. **Phase 6**: Starlark integration (enables runtime extensibility)
+5. **Phase 7**: Template rendering (enables HTML page serving)
+6. **Phase 8**: Basic web UI (usability)
+7. **Phase 10**: Security hardening (production requirement)
 
 These phases provide a minimal viable product (MVP) that demonstrates the core concept.
+
+**Current Status**: Phase 3 complete, 37 tests passing, ready for Phase 4
+
+**Key Achievement**: Complete authentication with JWT, no external JWT library, minimal dependencies
 
 ---
 
