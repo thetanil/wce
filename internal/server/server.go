@@ -57,6 +57,22 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("/new", s.handleNewCenv)
 	mux.HandleFunc("POST /{cenvID}/login", s.handleLogin)
+
+	// Permission management endpoints (admin only)
+	mux.HandleFunc("GET /{cenvID}/admin/permissions", s.handleListPermissions)
+	mux.HandleFunc("POST /{cenvID}/admin/permissions", s.handleGrantPermission)
+	mux.HandleFunc("DELETE /{cenvID}/admin/permissions", s.handleRevokePermission)
+	mux.HandleFunc("GET /{cenvID}/admin/policies", s.handleListPolicies)
+	mux.HandleFunc("POST /{cenvID}/admin/policies", s.handleCreatePolicy)
+
+	// Document API endpoints
+	mux.HandleFunc("POST /{cenvID}/documents", s.handleCreateDocument)
+	mux.HandleFunc("GET /{cenvID}/documents", s.handleListDocuments)
+	mux.HandleFunc("GET /{cenvID}/documents/search", s.handleSearchDocuments)
+	mux.HandleFunc("GET /{cenvID}/documents/{docID}", s.handleGetDocument)
+	mux.HandleFunc("PUT /{cenvID}/documents/{docID}", s.handleUpdateDocument)
+	mux.HandleFunc("DELETE /{cenvID}/documents/{docID}", s.handleDeleteDocument)
+
 	// Match both /{cenvID}/ and /{cenvID}/path/to/resource
 	mux.HandleFunc("/{cenvID}/{path...}", s.handleCenvRequest)
 

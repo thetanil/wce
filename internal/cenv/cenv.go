@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/thetanil/wce/internal/db"
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )
 
 // UUID regex pattern (RFC 4122 compliant)

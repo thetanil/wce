@@ -10,21 +10,30 @@ WCE (Web Compute Environment) is a lightweight web application platform built in
 
 ## Development Commands
 
+**IMPORTANT**: Always use the Makefile for building and testing. It automatically includes the required `fts5` build tag for SQLite FTS5 (Full-Text Search) support.
+
 ### Building
 ```bash
-go build -o wce
+make build
 ```
 
 ### Testing
 Tests use ONLY the Go standard library - no frameworks or assertion libraries:
 ```bash
-go test ./...
+make test
 ```
 
 ### Running
 ```bash
-./wce  # Starts server on http://localhost:5309
+make run  # Builds and starts server on http://localhost:5309
 ```
+
+### Cleaning
+```bash
+make clean  # Removes binary and clears build cache
+```
+
+**Note**: The `fts5` tag is REQUIRED because the document store uses SQLite FTS5 virtual tables for full-text search. The Makefile handles this automatically. See BUILD.md for manual build instructions if needed.
 
 ## Architecture
 

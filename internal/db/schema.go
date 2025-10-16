@@ -122,11 +122,72 @@ CREATE INDEX IF NOT EXISTS idx_audit_user ON _wce_audit_log(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON _wce_audit_log(action);
 
 -- ----------------------------------------------------------------------------
+-- Document Store (LiteStore-inspired with user tracking and versioning)
+-- Each cenv has its own isolated document store
+-- ----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS _wce_documents (
+    id TEXT PRIMARY KEY,                -- Document path/key (e.g., 'pages/home', 'api/users')
+    content TEXT NOT NULL,              -- Document body (JSON, HTML, markdown, etc.)
+    content_type TEXT NOT NULL,         -- MIME type (e.g., 'application/json', 'text/html')
+    is_binary INTEGER DEFAULT 0,        -- 0 = text, 1 = base64-encoded binary (BOOLEAN)
+    searchable INTEGER DEFAULT 1,       -- 1 = indexed for search, 0 = not indexed (BOOLEAN)
+    created_at INTEGER NOT NULL,        -- Unix timestamp
+    modified_at INTEGER NOT NULL,       -- Unix timestamp
+    created_by TEXT NOT NULL,           -- user_id
+    modified_by TEXT NOT NULL,          -- user_id
+    version INTEGER DEFAULT 1,          -- Incremental version number
+    FOREIGN KEY (created_by) REFERENCES _wce_users(user_id),
+    FOREIGN KEY (modified_by) REFERENCES _wce_users(user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_documents_content_type ON _wce_documents(content_type);
+CREATE INDEX IF NOT EXISTS idx_documents_created_by ON _wce_documents(created_by);
+CREATE INDEX IF NOT EXISTS idx_documents_modified_at ON _wce_documents(modified_at);
+
+-- Document tags for categorization
+CREATE TABLE IF NOT EXISTS _wce_document_tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id TEXT NOT NULL,
+    tag TEXT NOT NULL,
+    FOREIGN KEY (document_id) REFERENCES _wce_documents(id) ON DELETE CASCADE,
+    UNIQUE(document_id, tag)
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_tags_doc ON _wce_document_tags(document_id);
+CREATE INDEX IF NOT EXISTS idx_document_tags_tag ON _wce_document_tags(tag);
+
+-- Full-text search index (FTS5)
+-- Using external content table for better performance
+CREATE VIRTUAL TABLE IF NOT EXISTS _wce_document_search USING fts5(
+    document_id UNINDEXED,
+    content
+);
+
+-- Triggers to keep FTS5 index synchronized
+CREATE TRIGGER IF NOT EXISTS _wce_documents_ai AFTER INSERT ON _wce_documents BEGIN
+    INSERT INTO _wce_document_search(document_id, content)
+    VALUES (NEW.id, CASE WHEN NEW.searchable = 1 THEN NEW.content ELSE '' END);
+END;
+
+CREATE TRIGGER IF NOT EXISTS _wce_documents_ad AFTER DELETE ON _wce_documents BEGIN
+    DELETE FROM _wce_document_search WHERE document_id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS _wce_documents_au AFTER UPDATE ON _wce_documents BEGIN
+    UPDATE _wce_document_search
+    SET document_id = NEW.id,
+        content = CASE WHEN NEW.searchable = 1 THEN NEW.content ELSE '' END
+    WHERE document_id = OLD.id;
+END;
+
+-- ----------------------------------------------------------------------------
 -- Default Configuration Values
 -- ----------------------------------------------------------------------------
 
 INSERT OR IGNORE INTO _wce_config (key, value, updated_at) VALUES
     ('session_timeout_hours', '24', strftime('%s', 'now')),
     ('allow_registration', 'false', strftime('%s', 'now')),
-    ('max_users', '10', strftime('%s', 'now'));
+    ('max_users', '10', strftime('%s', 'now')),
+    ('max_document_size_mb', '10', strftime('%s', 'now'));
 `

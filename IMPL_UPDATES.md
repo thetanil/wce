@@ -33,7 +33,7 @@ All tasks from Phase 3 completed and documented:
 ## New Design: Document Store (Phase 5)
 
 ### Inspiration
-Based on LiteStore's approach to using SQLite as a document store, adapted for WCE's multi-tenant architecture.
+Based on LiteStore's approach to using SQLite as a document store, adapted for WCE's multi-user permission system within each cenv.
 
 ### Core Tables Added to Phase 5
 ```
@@ -178,11 +178,13 @@ These will extend the existing schema defined in `internal/db/schema.go`.
 - Minimal dependencies
 
 ### Adapted for WCE
-- Multi-tenant (per-cenv isolation)
-- Integrated with WCE permission system
+- Multi-user collaboration (user tracking: created_by, modified_by)
+- Integrated with WCE permission system (authz checks on all operations)
 - Document IDs are hierarchical paths
-- Commit hooks for automatic cache updates
+- Version tracking (incremented on each update)
+- Tag system for categorization
 - RESTful API following WCE patterns
+- Each cenv has isolated document store (operates on single cenv database)
 
 ## Implementation Sequence
 

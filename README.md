@@ -71,16 +71,28 @@ WCE is designed to be a minimal yet powerful web compute environment that compil
 ### Building
 
 ```bash
-go build -o wce
+make build
 ```
 
 ### Testing
 
-Tests use only the Go standard library - no frameworks or assertion libraries:
+```bash
+make test
+```
+
+### Running
 
 ```bash
-go test ./...
+make run
 ```
+
+### Cleaning
+
+```bash
+make clean
+```
+
+**Note**: The Makefile automatically includes the `fts5` build tag required for SQLite FTS5 support.
 
 ### Project Structure
 
