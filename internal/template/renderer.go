@@ -217,22 +217,55 @@ func evalSimpleExpression(thread *starlark.Thread, expr string, context *starlar
 		}
 	}
 
-	// Attribute access: obj.attr
+	// Attribute access: obj.attr (can be nested: obj.attr.subattr)
 	if strings.Contains(expr, ".") {
-		parts := strings.SplitN(expr, ".", 2)
+		parts := strings.Split(expr, ".")
+
+		// Start with the first part
 		obj, found, err := context.Get(starlark.String(parts[0]))
 		if err != nil || !found || obj == nil {
+			// DEBUG
+			//fmt.Printf("DEBUG: Failed to find '%s' in context\n", parts[0])
 			return starlark.String(""), nil
 		}
 
-		// Get attribute
-		if dict, ok := obj.(*starlark.Dict); ok {
-			val, found, _ := dict.Get(starlark.String(parts[1]))
-			if found && val != nil {
-				return val, nil
+		// Navigate through the remaining parts
+		for i := 1; i < len(parts); i++ {
+			if dict, ok := obj.(*starlark.Dict); ok {
+				// Starlark dict.Get() requires exact key match
+				// Try direct lookup first
+				lookupKey := starlark.String(parts[i])
+				val, found, _ := dict.Get(lookupKey)
+
+				// If not found, iterate to find by string value comparison
+				// (dict.Get might not work if keys were created differently)
+				if !found || val == nil {
+					for _, item := range dict.Items() {
+						k := item[0]
+						if kstr, ok := k.(starlark.String); ok {
+							// Compare actual string values
+							if string(kstr) == parts[i] {
+								val = item[1]
+								found = true
+								break
+							}
+						}
+					}
+
+					if !found || val == nil {
+						// Still not found
+						return starlark.String(""), nil
+					}
+				}
+
+				obj = val
+			} else {
+				// Not a dict, can't access attributes
+				return starlark.String(""), nil
 			}
 		}
-		return starlark.String(""), nil
+
+		return obj, nil
 	}
 
 	// Simple variable lookup
