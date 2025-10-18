@@ -75,6 +75,15 @@ func (s *Server) Start() error {
 	mux.HandleFunc("DELETE /{cenvID}/documents/{docID...}", s.handleDeleteDocument)
 	mux.HandleFunc("GET /{cenvID}/documents", s.handleListDocuments)
 
+	// Starlark endpoint management (admin only)
+	mux.HandleFunc("GET /{cenvID}/admin/endpoints", s.handleListEndpoints)
+	mux.HandleFunc("GET /{cenvID}/admin/endpoints/{endpointID}", s.handleGetEndpoint)
+	mux.HandleFunc("POST /{cenvID}/admin/endpoints", s.handleCreateEndpoint)
+	mux.HandleFunc("DELETE /{cenvID}/admin/endpoints/{endpointID}", s.handleDeleteEndpoint)
+
+	// Starlark endpoint execution (matches /star/* paths)
+	mux.HandleFunc("/{cenvID}/star/{starPath...}", s.handleExecuteStarlarkEndpoint)
+
 	// Match both /{cenvID}/ and /{cenvID}/path/to/resource
 	mux.HandleFunc("/{cenvID}/{path...}", s.handleCenvRequest)
 

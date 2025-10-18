@@ -4,22 +4,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Quick Status (October 2025)
 
-**✅ Phases 1-5 Complete**: Foundation, Database, Authentication, Authorization, and Document Store are fully implemented and tested.
+**✅ Phases 1-6 Complete**: Foundation, Database, Authentication, Authorization, Document Store, and Starlark Integration are fully implemented and tested.
 
 **Current State**:
-- **81 test cases** passing across 5 packages
-- **Test coverage**: 64-79% per package (auth 64%, authz 79.3%, cenv 76.7%, document 74.3%, server 36.4%)
+- **92 test cases** passing across 6 packages
+- **Test coverage**: 64-79% per package (auth 64%, authz 79.3%, cenv 76.7%, document 74.3%, server 43.2%, starlark 75.7%)
 - Document store with FTS5 full-text search working (automatic index updates via triggers)
 - REST API for documents operational (6 endpoints with auth/authz)
 - JWT authentication with session management
 - Role-based permissions with row-level policies
-- **6,434 lines of Go code** across 19 files
+- **Starlark runtime** with sandboxed execution, database access, and dynamic endpoints
+- **8,100+ lines of Go code** across 23 files
 
-**Phase 5 Details**:
-- Completed: Document schema (5.1), CRUD operations (5.2), REST API (5.3)
-- Deferred: Query API (5.4 - for Phase 6), Transactions (5.5 - for MVP), Commit hooks (5.6 - for Phase 7), Audit logging (5.7 - for Phase 12)
+**Phase 6 Highlights**:
+- Sandboxed Starlark execution with 5-second timeout
+- Database API: `db.query()` and `db.execute()` with parameterized queries
+- HTTP context: `request` object and `response()` builder
+- Dynamic endpoint registration via `/{cenvID}/star/{path}`
+- 5 new API endpoints for managing Starlark scripts
+- Full CRUD with admin/owner authorization
 
-**Next**: Phase 6 (Starlark Integration) or Phase 7 (Template System)
+**Next**: Phase 7 (Template System) or Phase 8 (Web UI)
 
 **See**: IMPL.md for detailed implementation status, README.md for user docs
 

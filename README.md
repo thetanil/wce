@@ -55,7 +55,7 @@ WCE is designed to be a minimal yet powerful web compute environment that compil
 
 ## Current Status
 
-### ✅ Implemented (Phases 1-5)
+### ✅ Implemented (Phases 1-6)
 
 - **Foundation** (Phase 1): HTTP server with cenv routing and database management ✅
 - **Database Schema** (Phase 2): Complete schema with security, users, permissions, and documents ✅
@@ -70,26 +70,34 @@ WCE is designed to be a minimal yet powerful web compute environment that compil
   - Automatic FTS5 index updates via SQLite triggers
   - 6 REST API endpoints with authentication and authorization
   - Content negotiation (JSON/raw)
+- **Starlark Integration** (Phase 6): Runtime extensibility without recompilation ✅
+  - Sandboxed Starlark execution environment
+  - Database access via `db.query()` and `db.execute()`
+  - HTTP request/response handling
+  - JSON encoding/decoding
+  - Dynamic endpoint registration (`/{cenvID}/star/{path}`)
+  - Full CRUD API for endpoint management
+  - 5 new API endpoints for Starlark scripts
 
 ### 📊 Test Coverage
 
-- **81 test cases** passing across 5 packages
+- **92 test cases** passing across 6 packages
 - **Coverage by package**:
   - internal/auth: 64.0%
   - internal/authz: 79.3%
   - internal/cenv: 76.7%
   - internal/document: 74.3%
-  - internal/server: 36.4%
+  - internal/server: 43.2%
+  - internal/starlark: 75.7%
 - **Build System**: Makefile with `build`, `test`, `coverage`, `run`, `clean` commands
 - **Documentation**: Complete implementation plan (IMPL.md), build guides (BUILD.md)
 
-### 📋 Planned (Phases 6+)
+### 📋 Planned (Phases 7+)
 
-- **Starlark Integration** (Phase 6): Runtime extensibility without recompilation
 - **Template System** (Phase 7): Document-based templates with rendering and caching
-- **Web UI** (Phase 8-9): Browser-based management interface
-- **Security Hardening** (Phase 10): Production-ready security measures
-- **Admin Features** (Phase 11-12): Session management and configuration
+- **Web UI** (Phase 8-9): Browser-based management interface with Monaco editor
+- **Security Hardening** (Phase 10): Rate limiting, resource quotas, security headers
+- **Admin Features** (Phase 11-12): Session management, configuration, audit logging
 
 ## Development
 

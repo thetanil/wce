@@ -182,6 +182,30 @@ CREATE TRIGGER IF NOT EXISTS _wce_documents_au AFTER UPDATE ON _wce_documents BE
 END;
 
 -- ----------------------------------------------------------------------------
+-- Starlark Endpoints (Phase 6)
+-- Dynamic HTTP endpoints defined via Starlark scripts
+-- ----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS _wce_endpoints (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    path TEXT NOT NULL,                 -- Endpoint path (e.g., '/api/hello', '/custom/*')
+    method TEXT NOT NULL,               -- HTTP method (GET, POST, PUT, DELETE, *)
+    script TEXT NOT NULL,               -- Starlark script content
+    description TEXT,                   -- Optional description
+    enabled INTEGER DEFAULT 1,          -- 1 = enabled, 0 = disabled (BOOLEAN)
+    created_at INTEGER NOT NULL,        -- Unix timestamp
+    modified_at INTEGER NOT NULL,       -- Unix timestamp
+    created_by TEXT NOT NULL,           -- user_id
+    modified_by TEXT NOT NULL,          -- user_id
+    FOREIGN KEY (created_by) REFERENCES _wce_users(user_id),
+    FOREIGN KEY (modified_by) REFERENCES _wce_users(user_id),
+    UNIQUE(path, method)                -- One script per path+method combination
+);
+
+CREATE INDEX IF NOT EXISTS idx_endpoints_path ON _wce_endpoints(path);
+CREATE INDEX IF NOT EXISTS idx_endpoints_enabled ON _wce_endpoints(enabled);
+
+-- ----------------------------------------------------------------------------
 -- Default Configuration Values
 -- ----------------------------------------------------------------------------
 
@@ -189,5 +213,6 @@ INSERT OR IGNORE INTO _wce_config (key, value, updated_at) VALUES
     ('session_timeout_hours', '24', strftime('%s', 'now')),
     ('allow_registration', 'false', strftime('%s', 'now')),
     ('max_users', '10', strftime('%s', 'now')),
-    ('max_document_size_mb', '10', strftime('%s', 'now'));
+    ('max_document_size_mb', '10', strftime('%s', 'now')),
+    ('starlark_timeout_seconds', '5', strftime('%s', 'now'));
 `
