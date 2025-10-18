@@ -84,6 +84,11 @@ func (s *Server) Start() error {
 	// Starlark endpoint execution (matches /star/* paths)
 	mux.HandleFunc("/{cenvID}/star/{starPath...}", s.handleExecuteStarlarkEndpoint)
 
+	// Template endpoints
+	mux.HandleFunc("GET /{cenvID}/templates", s.handleListTemplates)
+	mux.HandleFunc("POST /{cenvID}/templates/preview", s.handlePreviewTemplate)
+	mux.HandleFunc("GET /{cenvID}/pages/{path...}", s.handleRenderPage)
+
 	// Match both /{cenvID}/ and /{cenvID}/path/to/resource
 	mux.HandleFunc("/{cenvID}/{path...}", s.handleCenvRequest)
 
