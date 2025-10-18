@@ -7,12 +7,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **✅ Phases 1-5 Complete**: Foundation, Database, Authentication, Authorization, and Document Store are fully implemented and tested.
 
 **Current State**:
-- 97 tests passing across 5 packages
-- 64-79% test coverage
-- Document store with FTS5 full-text search working
-- REST API for documents operational
+- **81 test cases** passing across 5 packages
+- **Test coverage**: 64-79% per package (auth 64%, authz 79.3%, cenv 76.7%, document 74.3%, server 36.4%)
+- Document store with FTS5 full-text search working (automatic index updates via triggers)
+- REST API for documents operational (6 endpoints with auth/authz)
 - JWT authentication with session management
 - Role-based permissions with row-level policies
+- **6,434 lines of Go code** across 19 files
+
+**Phase 5 Details**:
+- Completed: Document schema (5.1), CRUD operations (5.2), REST API (5.3)
+- Deferred: Query API (5.4 - for Phase 6), Transactions (5.5 - for MVP), Commit hooks (5.6 - for Phase 7), Audit logging (5.7 - for Phase 12)
 
 **Next**: Phase 6 (Starlark Integration) or Phase 7 (Template System)
 

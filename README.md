@@ -57,22 +57,31 @@ WCE is designed to be a minimal yet powerful web compute environment that compil
 
 ### ✅ Implemented (Phases 1-5)
 
-- **Foundation** (Phase 1): HTTP server with cenv routing and database management
-- **Database Schema** (Phase 2): Complete schema with security, users, permissions, and documents
-- **Authentication** (Phase 3): JWT-based auth, session management, user registration
-- **Authorization** (Phase 4): Role-based permissions and row-level security policies
-- **Document Store** (Phase 5): Full CRUD operations with FTS5 search, REST API, and tags
+- **Foundation** (Phase 1): HTTP server with cenv routing and database management ✅
+- **Database Schema** (Phase 2): Complete schema with security, users, permissions, and documents ✅
+- **Authentication** (Phase 3): JWT-based auth, session management, user registration ✅
+- **Authorization** (Phase 4): Role-based permissions and row-level security policies ✅
+- **Document Store** (Phase 5): Full CRUD operations with FTS5 search, REST API, and tags ✅
   - Hierarchical document IDs (`pages/home`, `api/users`)
-  - Full-text search with BM25 ranking
+  - Full-text search with BM25 ranking (FTS5)
   - Version tracking and user auditing
   - Binary content support (base64 encoding)
   - Tag-based categorization
+  - Automatic FTS5 index updates via SQLite triggers
+  - 6 REST API endpoints with authentication and authorization
+  - Content negotiation (JSON/raw)
 
-### 🚧 In Progress
+### 📊 Test Coverage
 
-- **Test Coverage**: 97 tests across 5 packages, 64-79% coverage
-- **Build System**: Makefile with `build`, `test`, `coverage` commands
-- **Documentation**: Implementation plan (IMPL.md), build guides
+- **81 test cases** passing across 5 packages
+- **Coverage by package**:
+  - internal/auth: 64.0%
+  - internal/authz: 79.3%
+  - internal/cenv: 76.7%
+  - internal/document: 74.3%
+  - internal/server: 36.4%
+- **Build System**: Makefile with `build`, `test`, `coverage`, `run`, `clean` commands
+- **Documentation**: Complete implementation plan (IMPL.md), build guides (BUILD.md)
 
 ### 📋 Planned (Phases 6+)
 

@@ -503,7 +503,7 @@ These tables will be added to `internal/db/schema.go` in Phase 5.
 - Verifies authentication, authorization, versioning, and FTS5 search
 - Tests hierarchical document IDs (`test/hello`, `pages/home`)
 
-### 5.4 Parameterized Query Execution
+### 5.4 Parameterized Query Execution ⏸️ DEFERRED
 - [ ] API: `Query(sql string, params ...interface{})`
 - [ ] Always use parameterized statements
 - [ ] Never allow string interpolation in SQL
@@ -512,7 +512,9 @@ These tables will be added to `internal/db/schema.go` in Phase 5.
 
 **Test**: Parameterized queries prevent SQL injection
 
-### 5.5 Transaction Support
+**Status**: Deferred to Phase 6 (Starlark Integration) - will be exposed to Starlark scripts
+
+### 5.5 Transaction Support ⏸️ DEFERRED
 - [ ] Begin transaction: `BeginTx()`
 - [ ] Commit transaction: `Commit()`
 - [ ] Rollback transaction: `Rollback()`
@@ -521,7 +523,9 @@ These tables will be added to `internal/db/schema.go` in Phase 5.
 
 **Test**: Transactions roll back on error
 
-### 5.6 Commit Hook System
+**Status**: Deferred - basic transaction support exists internally (used in cenv.Initialize), but public API not needed for MVP
+
+### 5.6 Commit Hook System ⏸️ DEFERRED
 - [ ] Register Go callback functions for commit events
 - [ ] Execute callbacks after successful commit
 - [ ] Pass transaction details to callbacks
@@ -532,7 +536,11 @@ These tables will be added to `internal/db/schema.go` in Phase 5.
 
 **Test**: Callbacks execute after commit
 
-### 5.7 Audit Logging
+**Status**: Deferred to Phase 7 (Template System) - will be used for automatic page re-rendering
+
+**Note**: FTS5 search index is maintained automatically via SQLite triggers (no hook needed)
+
+### 5.7 Audit Logging ⏸️ DEFERRED
 - [ ] Log all write operations to `_wce_audit_log`
 - [ ] Capture: user_id, action, resource, timestamp, IP, user-agent
 - [ ] Log in same transaction as operation
@@ -541,31 +549,35 @@ These tables will be added to `internal/db/schema.go` in Phase 5.
 
 **Test**: All operations appear in audit log
 
+**Status**: Deferred to Phase 12 (Configuration & Admin) - table exists in schema but logging functions not implemented
+
 **Dependencies**: Phase 4 ✅
 **Deliverable**: Document store with full CRUD operations and secure database layer ✅
 
 **Phase 5 Summary:**
 - **Files Created**:
-  - `internal/document/document.go` (500+ lines) - Complete CRUD operations
+  - `internal/document/document.go` (500+ lines) - Complete CRUD operations with 10 functions
   - `internal/document/document_test.go` (600+ lines) - 21 comprehensive tests
-  - `internal/server/documents.go` (370+ lines) - REST API endpoints
+  - `internal/server/documents.go` (370+ lines) - REST API endpoints (6 endpoints)
   - `Makefile` - Build automation with FTS5 tag
   - `BUILD.md`, `GOFLAGS_SETUP.md` - Build documentation
-- **Schema Updates**: Added 3 document tables with FTS5 integration
+- **Schema Updates**: Added 3 document tables with FTS5 integration and 3 triggers
 - **Test Coverage**:
   - internal/document: 74.3% (21 tests)
   - Integration test for complete HTTP document CRUD flow
-  - Total: 97 tests passing across all packages
-- **Features**:
+  - **Total: 81 test cases passing across all packages**
+- **Features Implemented**:
   - Full-text search with BM25 ranking (FTS5)
   - Document versioning and timestamps
-  - Tag-based categorization
+  - Tag-based categorization (4 tag functions)
   - Binary content support (base64)
   - Permission-based access control
   - Content negotiation (Accept header: JSON/raw)
   - Hierarchical document IDs with slashes (`pages/home`, `api/users/list`)
-- **Build System**: Makefile with `make build`, `make test`, `make coverage` commands
-- **Deferred**: Transactions (5.5), commit hooks (5.6), audit logging (5.7) - not needed for MVP
+  - Automatic FTS5 index updates via SQLite triggers
+- **Build System**: Makefile with `make build`, `make test`, `make coverage`, `make run`, `make clean` commands
+- **Completed**: 5.1 (Schema), 5.2 (CRUD), 5.3 (REST API)
+- **Deferred**: 5.4 (Query API - for Phase 6), 5.5 (Transactions - for MVP), 5.6 (Commit hooks - for Phase 7), 5.7 (Audit logging - for Phase 12)
 
 **Document Store Design Notes:**
 - Inspired by LiteStore's approach but adapted for WCE's multi-user collaboration model
