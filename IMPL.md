@@ -739,119 +739,161 @@ def handle_request(req):
 
 ---
 
-## Phase 7: Template & Page Rendering System
+## Phase 7: Jinja Template System
 
-**Goal**: Document-based templates with rendering and caching
+**Goal**: On-demand Jinja2-style template rendering in pure Starlark
 
-### 7.1 Template Document Storage
-- [ ] Store templates as documents in `_wce_documents`
-- [ ] Template document IDs use prefix: `templates/header`, `templates/footer`
-- [ ] Content type: `text/html+template` for Go templates
-- [ ] Content type: `text/markdown` for Markdown templates
-- [ ] Store both source (edit version) and rendered (display version)
-- [ ] Use document versioning for template history
-- [ ] Tag templates: `template`, `page`, `component`, etc.
-
-**Test**: Templates stored and retrieved as documents
-
-**Implementation hints:**
-- Templates are special documents with rendering capabilities
-- Source stored in main document content
-- Rendered version cached in `_wce_page_cache` table (see 7.3)
-- Use document tags to identify template types
-
-### 7.2 Template Rendering Engine
-- [ ] Create `internal/template/template.go`
-- [ ] Parse Go templates from document content
-- [ ] Render with data from:
-  - Database queries
-  - Other documents
-  - Starlark functions
-  - Request context
+### 7.1 Jinja Starlark Implementation
+- [ ] Create `internal/starlark/jinja.star` - Pure Starlark Jinja engine
+- [ ] Implement lexer/tokenizer for Jinja syntax:
+  - `{{ variable }}` - Variable output
+  - `{% statement %}` - Control structures
+  - `{# comment #}` - Comments
+  - Filters: `{{ var|filter }}`
+- [ ] Implement parser to build AST from tokens
+- [ ] Implement renderer to process AST with context data
+- [ ] Support core Jinja features:
+  - Variable output with attribute/subscript access
+  - Filters: `upper`, `lower`, `default`, `length`, `join`, etc.
+  - Control structures: `if/elif/else`, `for`, `set`
+  - Template inheritance: `extends`, `block`
+  - Includes: `include`
+  - Loop variables: `loop.index`, `loop.first`, `loop.last`, etc.
 - [ ] Auto-escape HTML by default
-- [ ] Support custom functions (safe subset):
-  - `doc(id)` - Load another document
-  - `query(sql, params)` - Execute query (with permissions)
-  - `markdown(text)` - Convert markdown to HTML
-  - `json(data)` - Serialize to JSON
 - [ ] Handle rendering errors gracefully
 
-**Test**: Templates render correctly with data
+**Test**: Jinja templates render correctly with context data
 
-**Implementation hints:**
-- Use `html/template` for automatic XSS protection
-- Provide sandbox for template functions
-- Templates can include other templates
-- Support layout templates (base + content)
+**Implementation notes:**
+- Pure Starlark implementation (no Python dependencies)
+- Reference: Jinja2 documentation at https://jinja.palletsprojects.com/
+- Lexer tokenizes template into TEXT, VAR_BEGIN/END, STMT_BEGIN/END, etc.
+- Parser builds AST nodes: text, var, if, for, block, extends, include
+- Renderer walks AST and evaluates expressions with context
+- Template inheritance merges child blocks into parent template
 
-### 7.3 Page Cache System
-- [ ] Table: `_wce_page_cache` (document_id, rendered_html, rendered_at, etag)
-- [ ] Store rendered output after successful render
-- [ ] Generate ETag for cache validation
-- [ ] Invalidate cache on document changes
-- [ ] Set cache expiration (configurable per-cenv)
-- [ ] Support cache headers (Cache-Control, ETag, Last-Modified)
+### 7.2 Go Template Wrapper
+- [ ] Create `internal/template/template.go` (Go code)
+- [ ] `RenderTemplate(template, context, loader)` - Main entry point
+- [ ] Load and execute `jinja.star` Starlark library
+- [ ] Convert Go context (map[string]interface{}) to Starlark dict
+- [ ] Call Starlark `render()` function
+- [ ] Convert Starlark result back to Go string
+- [ ] Template loader function for `extends`/`include` support:
+  - Loads templates from `_wce_documents` by ID
+  - Returns template content as string
+- [ ] Comprehensive error handling and reporting
 
-**Test**: Cached pages serve faster, cache invalidates correctly
+**Test**: Go wrapper successfully renders Jinja templates
 
-**Implementation hints:**
-- Cache keyed by document ID + query parameters (if any)
-- ETag generated from content hash
-- Support `If-None-Match` header for 304 responses
-- Cache miss triggers on-demand render
+**Implementation notes:**
+- Thin Go wrapper around Starlark Jinja implementation
+- Template loader queries database for template documents
+- Supports template inheritance by loading parent templates
+- Error messages include line numbers and context
 
-### 7.4 Commit Hook for Auto-Rendering
-- [ ] Register commit hook in Phase 5's hook system
-- [ ] Detect template document changes in commit
-- [ ] Detect data changes that affect template output
-- [ ] Trigger re-render for affected templates
-- [ ] Update cache table asynchronously
-- [ ] Handle rendering errors (log, don't fail commit)
-- [ ] Update search index for searchable rendered content
+### 7.3 Template Document Storage
+- [ ] Store templates as documents in `_wce_documents`
+- [ ] Content type: `text/html+jinja` for Jinja templates
+- [ ] Document ID convention: `templates/{category}/{name}.html`
+  - `templates/base.html` - Base templates
+  - `templates/pages/home.html` - Page templates
+  - `templates/components/header.html` - Reusable components
+- [ ] Use document tags: `template`, `page`, `component`, `layout`
+- [ ] Leverage existing document versioning for template history
+- [ ] Use existing document API for template CRUD operations
 
-**Test**: Commits trigger cache updates automatically
+**Test**: Templates stored and retrieved as regular documents
 
-**Implementation hints:**
-- Hook runs after commit succeeds
-- Re-render can happen asynchronously
-- Track dependencies between templates and data
-- Consider incremental cache updates
+**Implementation notes:**
+- No separate template table needed - reuse document store
+- Templates are plain text documents with Jinja syntax
+- Modified templates take effect immediately on next render
+- Use existing `GET/POST/PUT/DELETE /{cenvID}/documents` endpoints
 
-### 7.5 Page Serving Endpoint
-- [ ] Endpoint: `GET /{cenv-id}/pages/{path}` OR `GET /{cenv-id}/p/{path}`
-- [ ] Map path to document ID: `pages/{path}`
-- [ ] Check cache first (`_wce_page_cache`)
-- [ ] Return cached HTML if fresh and ETag matches
-- [ ] Fall back to on-demand render if cache miss
-- [ ] Support content negotiation:
-  - `Accept: text/html` → rendered page
-  - `Accept: application/json` → document metadata + content
-- [ ] Return proper HTTP headers (Content-Type, Cache-Control, ETag)
-- [ ] Support 304 Not Modified responses
+### 7.4 Page Rendering Endpoint
+- [ ] Endpoint: `GET /{cenvID}/pages/{path...}`
+- [ ] Map URL path to template document ID: `templates/pages/{path}.html`
+- [ ] Load template document from `_wce_documents`
+- [ ] Prepare rendering context:
+  - Request data (path, method, query params, headers)
+  - User info from JWT claims
+  - Optional: query params as template variables
+- [ ] Template loader function for `extends`/`include`:
+  - Loads other templates from documents by ID
+  - Supports nested inheritance
+- [ ] Render template on-demand using Jinja engine
+- [ ] Return rendered HTML with proper headers:
+  - `Content-Type: text/html; charset=utf-8`
+  - Optional: `Cache-Control` headers
+- [ ] Handle errors gracefully (404 for missing template, 500 for render errors)
 
-**Test**: Pages served efficiently from cache
+**Test**: Pages render on-demand with correct output
 
-### 7.6 Markdown Rendering
-- [ ] Support Markdown documents: content_type = `text/markdown`
-- [ ] Render Markdown to HTML on-demand or cached
-- [ ] Use safe Markdown parser (no script injection)
-- [ ] Support code highlighting
-- [ ] Support custom extensions (tables, checkboxes, etc.)
+**Implementation notes:**
+- **On-demand rendering only** - no pre-rendering or caching
+- Template changes take effect immediately
+- Each request loads and renders the template fresh
+- Future: Add optional in-memory template compilation cache
 
-**Test**: Markdown documents render correctly
+### 7.5 Template Preview Endpoint
+- [ ] Endpoint: `POST /{cenvID}/templates/preview`
+- [ ] Accept template source and context in request body
+- [ ] Render template without saving to database
+- [ ] Return rendered HTML or error messages
+- [ ] Useful for template development and testing
 
-**Dependencies**: Phase 5 (Document Store)
-**Deliverable**: Document-based template system with rendering and caching
+**Test**: Can preview templates before saving
+
+### 7.6 Template Management
+- [ ] List templates: `GET /{cenvID}/documents?content_type=text/html+jinja`
+- [ ] Get template: `GET /{cenvID}/documents/{template-id}`
+- [ ] Create template: `POST /{cenvID}/documents`
+- [ ] Update template: `PUT /{cenvID}/documents/{template-id}`
+- [ ] Delete template: `DELETE /{cenvID}/documents/{template-id}`
+- [ ] All operations use existing document API
+
+**Test**: Template management via document API works correctly
+
+**Note**: Markdown rendering deferred to future phase or separate implementation
+
+**Dependencies**: Phase 5 (Document Store), Phase 6 (Starlark Integration) ✅
+**Deliverable**: On-demand Jinja template rendering system
 
 **Template System Design Notes:**
-- Templates stored as special documents (not separate table)
-- Source (edit) and rendered (display) versions both tracked
-- Cache system provides fast page serving
-- Commit hooks enable automatic cache updates
-- Templates can reference other documents and query data
-- Supports both Go templates and Markdown
-- Permission system controls template access
-- ETag-based cache validation for efficiency
+- **Pure Starlark implementation** - No Python or external dependencies
+- **Jinja2-compatible syntax** - Variables, filters, control flow, inheritance
+- **On-demand rendering** - Templates rendered fresh on each request
+- **Immediate updates** - Template changes take effect on next request
+- **Document-based storage** - Templates are regular documents with `text/html+jinja` content type
+- **Template inheritance** - Base templates with blocks that child templates override
+- **Auto-escaping** - HTML output is automatically escaped for XSS protection
+- **Sandboxed** - Templates cannot access filesystem or network
+- **Permission-aware** - Template rendering respects user permissions for database queries
+- **No pre-rendering** - No commit hooks or cache tables needed
+
+**Example Jinja Template:**
+```jinja2
+{% extends "templates/base.html" %}
+
+{% block title %}Welcome{{ if user %}, {{ user.name }}{% endif %}{% endblock %}
+
+{% block content %}
+  <h1>Recent Items</h1>
+  <ul>
+  {% for item in items %}
+    <li>{{ loop.index }}. {{ item.name|upper }}</li>
+  {% endfor %}
+  </ul>
+{% endblock %}
+```
+
+**Future Enhancements:**
+- Template compilation cache (parse once, render many times)
+- Async rendering for heavy templates
+- Custom filter registration
+- Markdown rendering support
+- Template debugging tools
 
 ---
 

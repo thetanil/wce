@@ -23,7 +23,7 @@ WCE is designed to be a minimal yet powerful web compute environment that compil
 - **Storage & Events**: SQLite3 serves dual purpose as both data store and event bus, using commit hooks to trigger Go callbacks
 - **Authentication**: Direct database authentication with credentials stored in each cenv's `_wce_users` table
 - **Document Database**: Pages (edit and display modes) stored and retrieved via SQL queries with a schema designed for document-style access
-- **Template Engine**: Efficient template rendering with templates and values stored in SQLite; pages pre-rendered on commit and cached before requests
+- **Template Engine**: Jinja2-compatible template rendering with templates stored in SQLite as documents; rendered on-demand with pure Starlark implementation
 - **Scripting Layer**: Embedded Starlark interpreter for extending functionality without recompilation
 - **Web Server**: HTTP server running on port 5309 by default
 - **Browser Editor**: [monaco-vim](https://github.com/brijeshb42/monaco-vim) integration for Vim-style editing in the browser
@@ -94,7 +94,7 @@ WCE is designed to be a minimal yet powerful web compute environment that compil
 
 ### 📋 Planned (Phases 7+)
 
-- **Template System** (Phase 7): Document-based templates with rendering and caching
+- **Jinja Template System** (Phase 7): On-demand Jinja2 rendering in pure Starlark
 - **Web UI** (Phase 8-9): Browser-based management interface with Monaco editor
 - **Security Hardening** (Phase 10): Rate limiting, resource quotas, security headers
 - **Admin Features** (Phase 11-12): Session management, configuration, audit logging
@@ -236,10 +236,9 @@ WCE embraces minimalism and composability:
 - **One binary, full platform**: Everything needed runs from a single executable
 - **No platform database**: Each cenv manages its own users and authentication
 - **Store everything**: Templates, data, configuration, users all in SQLite
-- **Extend at runtime**: No recompilation needed for new functionality
-- **Events over polling**: Commit hooks drive reactive behavior
-- **Script over compile**: Starlark for user-defined logic
-- **Render on write**: Pre-cache pages on commit, not on request
+- **Extend at runtime**: No recompilation needed for new functionality (Starlark endpoints + Jinja templates)
+- **Script over compile**: Starlark for user-defined logic and Jinja rendering
+- **Render on demand**: Templates rendered fresh on each request, changes take effect immediately
 - **True isolation**: Cenvs have no shared state, truly independent
 
 ## Security

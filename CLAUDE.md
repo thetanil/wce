@@ -79,16 +79,16 @@ make clean  # Removes binary and clears build cache
 
 4. **Starlark Scripting**: Sandboxed Starlark interpreter for runtime extensibility. Users can define custom HTTP endpoints without recompilation.
 
-5. **Template System**: Templates stored in SQLite with both edit (raw) and display (rendered) versions. Pages are pre-rendered on commit and cached before requests.
+5. **Template System**: Jinja2-compatible templates stored in SQLite and rendered on-demand. Pure Starlark implementation with no pre-rendering or caching.
 
 6. **Browser UI**: Monaco editor with monaco-vim integration for Vim-style editing in the browser.
 
 ### Event-Driven Architecture
 ```
-Database Commit → Commit Hook → Go Callback → Template Re-render → Cache Update
+HTTP Request → Load Template Document → Jinja Renderer (Starlark) → Return HTML
 ```
 
-This design ensures pages are ready on demand, separating content storage from rendered output.
+This design ensures templates are rendered fresh on each request, with immediate effect for template changes.
 
 ## Project Structure
 
@@ -172,7 +172,7 @@ See IMPL.md for detailed implementation plan. The project is organized into 15 p
 4. **Phase 4**: Authorization & permissions
 5. **Phase 5**: Core database operations with commit hooks
 6. **Phase 6**: Starlark integration
-7. **Phase 7**: Template system
+7. **Phase 7**: Jinja template system (on-demand rendering in Starlark)
 8. **Phase 8**: Web UI foundation
 9. **Phase 9**: Advanced UI features
 10. **Phase 10**: Security hardening
